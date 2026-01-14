@@ -82,7 +82,7 @@ export async function syncTaskToCalendar(task: Task): Promise<string | null> {
       },
     };
 
-    let eventId = task.googleCalendarEventId;
+    let eventId: string | undefined = task.googleCalendarEventId;
 
     if (eventId) {
       // Aggiorna evento esistente
