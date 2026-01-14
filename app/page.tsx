@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useTaskStore } from '@/lib/store';
+import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { Task } from '@/types';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -18,6 +19,9 @@ export default function Home() {
   const router = useRouter();
   const { viewMode, sidebarOpen, getUserProjects, filters, setCurrentUserId } = useTaskStore();
   const projects = getUserProjects();
+  
+  // Sincronizzazione con il database
+  const { isLoading: isSyncing } = useDatabaseSync();
 
   // Set current user ID when session is available
   useEffect(() => {
@@ -42,11 +46,16 @@ export default function Home() {
     }
   }, [status, router]);
 
-  // Show loading while checking authentication
-  if (status === 'loading' || !mounted) {
+  // Show loading while checking authentication or syncing
+  if (status === 'loading' || !mounted || isSyncing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          {isSyncing && (
+            <p className="text-slate-400 text-sm">Sincronizzazione dati...</p>
+          )}
+        </div>
       </div>
     );
   }
@@ -94,13 +103,13 @@ export default function Home() {
       <main
         className={cn(
           'flex-1 flex flex-col min-h-screen transition-all duration-300',
-          sidebarOpen ? 'lg:ml-0' : 'lg:ml-0'
+          sidebarOpen && 'lg:ml-64'
         )}
       >
         <Header onAddTask={() => handleAddTask()} />
 
         {/* Content Area */}
-        <div className="flex-1 p-4 lg:p-6 overflow-auto">
+        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
           {/* Page Title */}
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-white">

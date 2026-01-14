@@ -61,7 +61,8 @@ export default function TaskCard({
       {...draggableProps}
       {...dragHandleProps}
       className={cn(
-        'task-card group',
+        'group p-3 sm:p-4 bg-slate-900/60 rounded-lg border border-slate-800/50',
+        'hover:bg-slate-900/80 transition-all cursor-pointer',
         task.completed && 'opacity-60',
         task.important && !task.completed && 'border-l-4 border-l-amber-500',
         hasOverdue && 'border-l-4 border-l-red-500'
@@ -71,9 +72,22 @@ export default function TaskCard({
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation();
             toggleTaskComplete(task.id);
+            // Sincronizza con Google Calendar quando si completa/uncompleta
+            if (task.dueDate) {
+              const updatedTask = { ...task, completed: !task.completed };
+              try {
+                await fetch('/api/calendar/sync', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ task: updatedTask, action: 'sync' }),
+                });
+              } catch (error) {
+                console.error('Error syncing to calendar:', error);
+              }
+            }
           }}
           className={cn(
             'mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
@@ -233,6 +247,14 @@ export default function TaskCard({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          // Elimina anche l'evento da Google Calendar se esiste
+                          if (task.googleCalendarEventId) {
+                            fetch('/api/calendar/sync', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ task, action: 'delete' }),
+                            }).catch(console.error);
+                          }
                           deleteTask(task.id);
                           setShowMenu(false);
                         }}

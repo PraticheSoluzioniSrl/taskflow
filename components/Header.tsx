@@ -55,7 +55,7 @@ export default function Header({ onAddTask }: HeaderProps) {
           <div
             className={cn(
               'relative flex items-center transition-all duration-200',
-              searchFocused ? 'w-80' : 'w-64'
+              searchFocused ? 'w-64 sm:w-80' : 'w-40 sm:w-64'
             )}
           >
             <Search className="absolute left-3 w-4 h-4 text-slate-500" />

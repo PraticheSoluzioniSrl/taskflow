@@ -87,7 +87,7 @@ export default function TaskModal({
     setSubtasks([]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
@@ -107,12 +107,40 @@ export default function TaskModal({
       status,
       completed: status === 'done',
       subtasks,
+      googleCalendarEventId: task?.googleCalendarEventId,
     };
 
+    let savedTask: Task;
     if (task) {
       updateTask(task.id, taskData);
+      savedTask = { ...task, ...taskData };
     } else {
-      addTask(taskData);
+      const newTask = addTask(taskData);
+      savedTask = { ...newTask, ...taskData };
+    }
+
+    // Sincronizza con Google Calendar se c'è una data
+    if (dueDate) {
+      try {
+        await fetch('/api/calendar/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: savedTask, action: 'sync' }),
+        });
+      } catch (error) {
+        console.error('Error syncing to calendar:', error);
+      }
+    } else if (task?.googleCalendarEventId && !dueDate) {
+      // Se il task aveva una data ma ora non ce l'ha più, elimina l'evento
+      try {
+        await fetch('/api/calendar/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: savedTask, action: 'delete' }),
+        });
+      } catch (error) {
+        console.error('Error deleting calendar event:', error);
+      }
     }
 
     onClose();

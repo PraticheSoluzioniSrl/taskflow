@@ -92,10 +92,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'fixed lg:relative inset-y-0 left-0 z-40',
-        'w-72 bg-slate-950/80 backdrop-blur-xl border-r border-slate-800/50',
+        'fixed lg:sticky inset-y-0 left-0 z-40',
+        'w-64 sm:w-72 bg-slate-950/80 backdrop-blur-xl border-r border-slate-800/50',
         'flex flex-col transition-transform duration-300',
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0 lg:w-0 lg:opacity-0'
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}
     >
       {/* Header */}
