@@ -1,11 +1,14 @@
-import { sql } from '@vercel/postgres';
+import { createClient } from '@vercel/postgres';
 import { Task, Project, Tag } from '@/types';
+
+// Crea il client del database
+const db = createClient();
 
 // Inizializza le tabelle del database (da chiamare una volta)
 export async function initDatabase() {
   try {
     // Crea tabella users
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
@@ -16,7 +19,7 @@ export async function initDatabase() {
     `;
 
     // Crea tabella projects
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS projects (
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -27,7 +30,7 @@ export async function initDatabase() {
     `;
 
     // Crea tabella tags
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS tags (
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -37,7 +40,7 @@ export async function initDatabase() {
     `;
 
     // Crea tabella tasks
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS tasks (
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -58,7 +61,7 @@ export async function initDatabase() {
     `;
 
     // Crea tabella task_tags (many-to-many)
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS task_tags (
         task_id VARCHAR(255) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
         tag_id VARCHAR(255) NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
@@ -67,7 +70,7 @@ export async function initDatabase() {
     `;
 
     // Crea tabella subtasks
-    await sql`
+    await db.sql`
       CREATE TABLE IF NOT EXISTS subtasks (
         id VARCHAR(255) PRIMARY KEY,
         task_id VARCHAR(255) NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -78,10 +81,10 @@ export async function initDatabase() {
     `;
 
     // Crea indici per migliorare le performance
-    await sql`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);`;
+    await db.sql`CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);`;
+    await db.sql`CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);`;
+    await db.sql`CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);`;
+    await db.sql`CREATE INDEX IF NOT EXISTS idx_tags_user_id ON tags(user_id);`;
 
     return { success: true };
   } catch (error) {
@@ -93,7 +96,7 @@ export async function initDatabase() {
 // Funzioni per gestire gli utenti
 export async function createOrUpdateUser(userId: string, email: string, name?: string, image?: string) {
   try {
-    await sql`
+    await db.sql`
       INSERT INTO users (id, email, name, image)
       VALUES (${userId}, ${email}, ${name || null}, ${image || null})
       ON CONFLICT (id) DO UPDATE
@@ -178,7 +181,7 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
     const now = new Date().toISOString();
 
     // Inserisci il task
-    await sql`
+    await db.sql`
       INSERT INTO tasks (
         id, user_id, project_id, title, description, completed, important,
         due_date, due_time, reminder, status, google_calendar_event_id,
@@ -196,7 +199,7 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
     // Inserisci i tag associati
     if (task.tags && task.tags.length > 0) {
       for (const tagId of task.tags) {
-        await sql`
+        await db.sql`
           INSERT INTO task_tags (task_id, tag_id)
           VALUES (${taskId}, ${tagId})
           ON CONFLICT DO NOTHING;
@@ -207,7 +210,7 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
     // Inserisci i subtask
     if (task.subtasks && task.subtasks.length > 0) {
       for (const subtask of task.subtasks) {
-        await sql`
+        await db.sql`
           INSERT INTO subtasks (id, task_id, title, completed, reminder)
           VALUES (${subtask.id}, ${taskId}, ${subtask.title}, ${subtask.completed}, ${subtask.reminder || null});
         `;
@@ -278,7 +281,7 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
     values.push(taskId, userId);
 
     if (updateFields.length > 1) {
-      await sql.query(
+      await db.sql.query(
         `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
         values
       );
@@ -287,11 +290,11 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
     // Aggiorna i tag se necessario
     if (updates.tags !== undefined) {
       // Rimuovi tutti i tag esistenti
-      await sql`DELETE FROM task_tags WHERE task_id = ${taskId};`;
+      await db.sql`DELETE FROM task_tags WHERE task_id = ${taskId};`;
       // Aggiungi i nuovi tag
       if (updates.tags.length > 0) {
         for (const tagId of updates.tags) {
-          await sql`
+          await db.sql`
             INSERT INTO task_tags (task_id, tag_id)
             VALUES (${taskId}, ${tagId});
           `;
@@ -302,11 +305,11 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
     // Aggiorna i subtask se necessario
     if (updates.subtasks !== undefined) {
       // Rimuovi tutti i subtask esistenti
-      await sql`DELETE FROM subtasks WHERE task_id = ${taskId};`;
+      await db.sql`DELETE FROM subtasks WHERE task_id = ${taskId};`;
       // Aggiungi i nuovi subtask
       if (updates.subtasks.length > 0) {
         for (const subtask of updates.subtasks) {
-          await sql`
+          await db.sql`
             INSERT INTO subtasks (id, task_id, title, completed, reminder)
             VALUES (${subtask.id}, ${taskId}, ${subtask.title}, ${subtask.completed}, ${subtask.reminder || null});
           `;
@@ -321,7 +324,7 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
 
 export async function deleteTask(taskId: string, userId: string): Promise<void> {
   try {
-    await sql`
+    await db.sql`
       DELETE FROM tasks
       WHERE id = ${taskId} AND user_id = ${userId};
     `;
@@ -357,7 +360,7 @@ export async function createProject(project: Omit<Project, 'id' | 'createdAt'>):
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
 
-    await sql`
+    await db.sql`
       INSERT INTO projects (id, user_id, name, color, created_at)
       VALUES (${projectId}, ${project.userId}, ${project.name}, ${project.color}, ${now});
     `;
@@ -391,7 +394,7 @@ export async function updateProject(projectId: string, updates: Partial<Project>
     values.push(projectId, userId);
 
     if (updateFields.length > 0) {
-      await sql.query(
+      await db.sql.query(
         `UPDATE projects SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
         values
       );
@@ -404,7 +407,7 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 
 export async function deleteProject(projectId: string, userId: string): Promise<void> {
   try {
-    await sql`
+    await db.sql`
       DELETE FROM projects
       WHERE id = ${projectId} AND user_id = ${userId};
     `;
@@ -438,7 +441,7 @@ export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
   try {
     const tagId = crypto.randomUUID();
 
-    await sql`
+    await db.sql`
       INSERT INTO tags (id, user_id, name, color)
       VALUES (${tagId}, ${tag.userId}, ${tag.name}, ${tag.color});
     `;
@@ -471,7 +474,7 @@ export async function updateTag(tagId: string, updates: Partial<Tag>, userId: st
     values.push(tagId, userId);
 
     if (updateFields.length > 0) {
-      await sql.query(
+      await db.sql.query(
         `UPDATE tags SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
         values
       );
@@ -484,7 +487,7 @@ export async function updateTag(tagId: string, updates: Partial<Tag>, userId: st
 
 export async function deleteTag(tagId: string, userId: string): Promise<void> {
   try {
-    await sql`
+    await db.sql`
       DELETE FROM tags
       WHERE id = ${tagId} AND user_id = ${userId};
     `;
