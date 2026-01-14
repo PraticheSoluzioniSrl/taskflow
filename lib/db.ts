@@ -115,7 +115,7 @@ export async function createOrUpdateUser(userId: string, email: string, name?: s
 export async function getTasksByUserId(userId: string): Promise<Task[]> {
   try {
     // Prima recupera i task
-    const tasksResult = await sql`
+    const tasksResult = await db.sql`
       SELECT * FROM tasks
       WHERE user_id = ${userId}
       ORDER BY task_order ASC, created_at DESC;
@@ -127,14 +127,14 @@ export async function getTasksByUserId(userId: string): Promise<Task[]> {
     const tasksWithRelations = await Promise.all(
       tasks.map(async (task: any) => {
         // Recupera i tag
-        const tagsResult = await sql`
+        const tagsResult = await db.sql`
           SELECT tag_id FROM task_tags
           WHERE task_id = ${task.id};
         `;
         const tags = tagsResult.rows.map((row: any) => row.tag_id);
 
         // Recupera i subtask
-        const subtasksResult = await sql`
+        const subtasksResult = await db.sql`
           SELECT id, title, completed, reminder
           FROM subtasks
           WHERE task_id = ${task.id};
@@ -337,7 +337,7 @@ export async function deleteTask(taskId: string, userId: string): Promise<void> 
 // Funzioni per gestire i progetti
 export async function getProjectsByUserId(userId: string): Promise<Project[]> {
   try {
-    const result = await sql`
+    const result = await db.sql`
       SELECT * FROM projects
       WHERE user_id = ${userId}
       ORDER BY created_at DESC;
@@ -418,7 +418,7 @@ export async function deleteProject(projectId: string, userId: string): Promise<
 // Funzioni per gestire i tag
 export async function getTagsByUserId(userId: string): Promise<Tag[]> {
   try {
-    const result = await sql`
+    const result = await db.sql`
       SELECT * FROM tags
       WHERE user_id = ${userId}
       ORDER BY name ASC;
