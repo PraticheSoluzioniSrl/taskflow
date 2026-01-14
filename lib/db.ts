@@ -278,13 +278,24 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
     }
 
     updateFields.push(`updated_at = NOW()`);
-    values.push(taskId, userId);
 
     if (updateFields.length > 1) {
-      // Costruisci la query dinamica usando template literals
-      const query = `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
-      // Usa una query raw per aggiornamenti dinamici
-      await db.sql.unsafe(query, values);
+      // Costruisci la query usando template literals con valori interpolati
+      const setClause = updateFields.map((field, idx) => {
+        const value = values[idx];
+        if (value === null || value === undefined) {
+          return field.split('=')[0].trim() + ' = NULL';
+        }
+        if (typeof value === 'string') {
+          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
+        }
+        if (typeof value === 'boolean') {
+          return field.split('=')[0].trim() + ` = ${value}`;
+        }
+        return field.split('=')[0].trim() + ` = ${value}`;
+      }).join(', ');
+      
+      await db.sql`UPDATE tasks SET ${db.sql.raw(setClause)} WHERE id = ${taskId} AND user_id = ${userId}`;
     }
 
     // Aggiorna i tag se necessario
@@ -391,11 +402,19 @@ export async function updateProject(projectId: string, updates: Partial<Project>
       values.push(updates.color);
     }
 
-    values.push(projectId, userId);
-
     if (updateFields.length > 0) {
-      const query = `UPDATE projects SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
-      await db.sql.unsafe(query, values);
+      const setClause = updateFields.map((field, idx) => {
+        const value = values[idx];
+        if (value === null || value === undefined) {
+          return field.split('=')[0].trim() + ' = NULL';
+        }
+        if (typeof value === 'string') {
+          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
+        }
+        return field.split('=')[0].trim() + ` = ${value}`;
+      }).join(', ');
+      
+      await db.sql`UPDATE projects SET ${db.sql.raw(setClause)} WHERE id = ${projectId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating project:', error);
@@ -469,11 +488,19 @@ export async function updateTag(tagId: string, updates: Partial<Tag>, userId: st
       values.push(updates.color);
     }
 
-    values.push(tagId, userId);
-
     if (updateFields.length > 0) {
-      const query = `UPDATE tags SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
-      await db.sql.unsafe(query, values);
+      const setClause = updateFields.map((field, idx) => {
+        const value = values[idx];
+        if (value === null || value === undefined) {
+          return field.split('=')[0].trim() + ' = NULL';
+        }
+        if (typeof value === 'string') {
+          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
+        }
+        return field.split('=')[0].trim() + ` = ${value}`;
+      }).join(', ');
+      
+      await db.sql`UPDATE tags SET ${db.sql.raw(setClause)} WHERE id = ${tagId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating tag:', error);
