@@ -40,9 +40,12 @@ export default function TaskCard({
     toggleTaskImportant,
     deleteTask,
     toggleSubtaskComplete,
-    projects,
-    tags,
+    getUserProjects,
+    getUserTags,
   } = useTaskStore();
+  
+  const projects = getUserProjects();
+  const tags = getUserTags();
 
   const [expanded, setExpanded] = useState(false);
   const [showMenu, setShowMenu] = useState(false);

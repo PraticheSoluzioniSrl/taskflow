@@ -124,6 +124,19 @@ openssl rand -base64 32
 2. Sezione "Environment Variables"
 3. Aggiungi tutte le variabili
 
+## 🗄️ Setup Database (Vercel Postgres)
+
+TaskFlow usa Vercel Postgres per la persistenza dei dati. Segui le istruzioni in [SETUP_DATABASE.md](./SETUP_DATABASE.md) per configurare il database.
+
+**Quick Setup:**
+
+1. Vai su Vercel Dashboard → Storage → Create Database → Postgres
+2. Le variabili d'ambiente vengono aggiunte automaticamente
+3. Dopo il deploy, chiama `/api/init-db` per inizializzare le tabelle
+4. I dati vengono sincronizzati automaticamente quando fai login
+
+**Nota:** Se il database non è configurato, l'app funziona comunque usando localStorage come fallback.
+
 ## 🛠️ Tecnologie
 
 - **Framework**: [Next.js 14](https://nextjs.org/)

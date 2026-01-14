@@ -1,6 +1,7 @@
 'use client';
 
 import { useTaskStore } from '@/lib/store';
+import { useSession } from 'next-auth/react';
 import {
   Menu,
   Search,
@@ -28,6 +29,7 @@ export default function Header({ onAddTask }: HeaderProps) {
     toggleSidebar,
     sidebarOpen,
   } = useTaskStore();
+  const { data: session } = useSession();
 
   const [searchFocused, setSearchFocused] = useState(false);
 
@@ -112,10 +114,23 @@ export default function Header({ onAddTask }: HeaderProps) {
           </button>
 
           <button className="btn-icon">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-              <User className="w-4 h-4 text-white" />
-            </div>
+            {session?.user?.image ? (
+              <img
+                src={session.user.image}
+                alt={session.user.name || 'User'}
+                className="w-8 h-8 rounded-full"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
+              </div>
+            )}
           </button>
+          {session?.user?.name && (
+            <span className="hidden sm:inline text-sm text-slate-300">
+              {session.user.name}
+            </span>
+          )}
         </div>
       </div>
 

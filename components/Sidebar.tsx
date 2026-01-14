@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { useTaskStore } from '@/lib/store';
 import { PROJECT_COLORS } from '@/types';
 import {
@@ -28,6 +29,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ onClose }: SidebarProps) {
+  const { data: session } = useSession();
   const {
     viewMode,
     setViewMode,
@@ -40,7 +42,21 @@ export default function Sidebar({ onClose }: SidebarProps) {
     tasks,
     sidebarOpen,
     toggleSidebar,
+    setCurrentUserId,
+    getUserProjects,
+    getUserTags,
   } = useTaskStore();
+
+  // Set current user ID when session is available
+  useEffect(() => {
+    if (session?.user?.email) {
+      setCurrentUserId(session.user.email);
+    }
+  }, [session, setCurrentUserId]);
+
+  // Get filtered projects and tags for current user
+  const userProjects = getUserProjects();
+  const userTags = getUserTags();
 
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
@@ -58,16 +74,16 @@ export default function Sidebar({ onClose }: SidebarProps) {
   }).length;
 
   const handleAddProject = () => {
-    if (newProjectName.trim()) {
-      addProject(newProjectName.trim(), newProjectColor);
+    if (newProjectName.trim() && session?.user?.email) {
+      addProject(newProjectName.trim(), newProjectColor, session.user.email);
       setNewProjectName('');
       setShowAddProject(false);
     }
   };
 
   const handleAddTag = () => {
-    if (newTagName.trim()) {
-      addTag(newTagName.trim(), newTagColor);
+    if (newTagName.trim() && session?.user?.email) {
+      addTag(newTagName.trim(), newTagColor, session.user.email);
       setNewTagName('');
       setShowAddTag(false);
     }
@@ -215,7 +231,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
           {projectsExpanded && (
             <div className="ml-4 space-y-1">
-              {projects.map((project) => {
+              {userProjects.map((project) => {
                 const count = tasks.filter((t) => t.projectId === project.id && !t.completed).length;
                 return (
                   <button
@@ -278,7 +294,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 </div>
               )}
 
-              {projects.length === 0 && !showAddProject && (
+              {userProjects.length === 0 && !showAddProject && (
                 <p className="px-3 py-2 text-sm text-slate-500">
                   Nessun progetto
                 </p>
@@ -317,7 +333,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
           {tagsExpanded && (
             <div className="ml-4 space-y-1">
-              {tags.map((tag) => (
+              {userTags.map((tag) => (
                 <button
                   key={tag.id}
                   onClick={() => {
@@ -377,7 +393,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 </div>
               )}
 
-              {tags.length === 0 && !showAddTag && (
+              {userTags.length === 0 && !showAddTag && (
                 <p className="px-3 py-2 text-sm text-slate-500">
                   Nessun tag
                 </p>
@@ -390,10 +406,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {/* Footer */}
       <div className="p-4 border-t border-slate-800/50 space-y-3">
         <GoogleCalendarSync />
-        <button className="sidebar-link w-full">
+        <a href="/settings" className="sidebar-link w-full">
           <Settings className="w-5 h-5" />
           <span>Impostazioni</span>
-        </button>
+        </a>
       </div>
     </aside>
   );

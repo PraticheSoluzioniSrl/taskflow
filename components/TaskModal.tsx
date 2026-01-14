@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { Task, PROJECT_COLORS, TAG_COLORS } from '@/types';
 import { useTaskStore } from '@/lib/store';
 import { cn, formatDate } from '@/lib/utils';
@@ -30,7 +31,11 @@ export default function TaskModal({
   onClose,
   defaultDate,
 }: TaskModalProps) {
-  const { addTask, updateTask, projects, tags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
+  const { addTask, updateTask, getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
+  const { data: session } = useSession();
+  
+  const projects = getUserProjects();
+  const tags = getUserTags();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -86,7 +91,11 @@ export default function TaskModal({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const userId = session?.user?.email || '';
+    if (!userId) return;
+
     const taskData = {
+      userId,
       title: title.trim(),
       description: description.trim() || undefined,
       dueDate: dueDate || undefined,

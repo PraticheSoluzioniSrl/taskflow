@@ -1,5 +1,6 @@
 export interface Task {
   id: string;
+  userId: string; // ID dell'utente proprietario del task
   title: string;
   description?: string;
   completed: boolean;
@@ -28,6 +29,7 @@ export type TaskStatus = 'backlog' | 'todo' | 'in-progress' | 'done';
 
 export interface Project {
   id: string;
+  userId: string; // ID dell'utente proprietario del progetto
   name: string;
   color: string;
   icon?: string;
@@ -36,6 +38,7 @@ export interface Project {
 
 export interface Tag {
   id: string;
+  userId: string; // ID dell'utente proprietario del tag
   name: string;
   color: string;
 }

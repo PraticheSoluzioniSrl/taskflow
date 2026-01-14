@@ -8,12 +8,16 @@ interface TaskStore {
   tasks: Task[];
   projects: Project[];
   tags: Tag[];
+  currentUserId: string | null; // ID dell'utente corrente
   
   // UI State
   viewMode: ViewMode;
   selectedDate: string | null;
   filters: FilterState;
   sidebarOpen: boolean;
+  
+  // User Actions
+  setCurrentUserId: (userId: string | null) => void;
   
   // Task Actions
   addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => Task;
@@ -31,12 +35,12 @@ interface TaskStore {
   toggleSubtaskComplete: (taskId: string, subtaskId: string) => void;
   
   // Project Actions
-  addProject: (name: string, color: string) => Project;
+  addProject: (name: string, color: string, userId: string) => Project;
   updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
   
   // Tag Actions
-  addTag: (name: string, color: string) => Tag;
+  addTag: (name: string, color: string, userId: string) => Tag;
   updateTag: (id: string, updates: Partial<Tag>) => void;
   deleteTag: (id: string) => void;
   
@@ -47,13 +51,15 @@ interface TaskStore {
   resetFilters: () => void;
   toggleSidebar: () => void;
   
-  // Computed
+  // Computed - filtrano per userId corrente
   getFilteredTasks: () => Task[];
   getTasksByDate: (date: string) => Task[];
   getTasksByProject: (projectId: string) => Task[];
   getTasksByStatus: (status: TaskStatus) => Task[];
   getImportantTasks: () => Task[];
   getOverdueTasks: () => Task[];
+  getUserProjects: () => Project[];
+  getUserTags: () => Tag[];
 }
 
 const defaultFilters: FilterState = {
@@ -72,10 +78,14 @@ export const useTaskStore = create<TaskStore>()(
       tasks: [],
       projects: [],
       tags: [],
+      currentUserId: null,
       viewMode: 'list',
       selectedDate: null,
       filters: defaultFilters,
       sidebarOpen: true,
+
+      // User Actions
+      setCurrentUserId: (userId) => set({ currentUserId: userId }),
 
       // Task Actions
       addTask: (taskData) => {
@@ -222,9 +232,10 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       // Project Actions
-      addProject: (name, color) => {
+      addProject: (name, color, userId) => {
         const newProject: Project = {
           id: uuidv4(),
+          userId,
           name,
           color,
           createdAt: new Date().toISOString(),
@@ -251,9 +262,10 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       // Tag Actions
-      addTag: (name, color) => {
+      addTag: (name, color, userId) => {
         const newTag: Tag = {
           id: uuidv4(),
+          userId,
           name,
           color,
         };
@@ -287,10 +299,14 @@ export const useTaskStore = create<TaskStore>()(
       resetFilters: () => set({ filters: defaultFilters }),
       toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
 
-      // Computed Getters
+      // Computed Getters - filtrano per userId corrente
       getFilteredTasks: () => {
-        const { tasks, filters } = get();
+        const { tasks, filters, currentUserId } = get();
         return tasks.filter((task) => {
+          // Filtro per userId
+          if (currentUserId && task.userId !== currentUserId) {
+            return false;
+          }
           // Task importanti non completati sono sempre visibili
           if (task.important && !task.completed) {
             // Ma applichiamo comunque altri filtri se specificati
@@ -337,26 +353,56 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       getTasksByDate: (date) => {
-        return get().tasks.filter((task) => task.dueDate === date);
+        const { tasks, currentUserId } = get();
+        return tasks.filter((task) => {
+          if (currentUserId && task.userId !== currentUserId) return false;
+          return task.dueDate === date;
+        });
       },
 
       getTasksByProject: (projectId) => {
-        return get().tasks.filter((task) => task.projectId === projectId);
+        const { tasks, currentUserId } = get();
+        return tasks.filter((task) => {
+          if (currentUserId && task.userId !== currentUserId) return false;
+          return task.projectId === projectId;
+        });
       },
 
       getTasksByStatus: (status) => {
-        return get().tasks.filter((task) => task.status === status);
+        const { tasks, currentUserId } = get();
+        return tasks.filter((task) => {
+          if (currentUserId && task.userId !== currentUserId) return false;
+          return task.status === status;
+        });
       },
 
       getImportantTasks: () => {
-        return get().tasks.filter((task) => task.important && !task.completed);
+        const { tasks, currentUserId } = get();
+        return tasks.filter((task) => {
+          if (currentUserId && task.userId !== currentUserId) return false;
+          return task.important && !task.completed;
+        });
       },
 
       getOverdueTasks: () => {
+        const { tasks, currentUserId } = get();
         const today = new Date().toISOString().split('T')[0];
-        return get().tasks.filter(
-          (task) => task.dueDate && task.dueDate < today && !task.completed
-        );
+        return tasks.filter((task) => {
+          if (currentUserId && task.userId !== currentUserId) return false;
+          return task.dueDate && task.dueDate < today && !task.completed;
+        });
+      },
+
+      getUserProjects: () => {
+        const { projects, currentUserId } = get();
+        if (!currentUserId) return [];
+        return projects.filter((project) => project.userId === currentUserId);
+      },
+
+      getUserTags: () => {
+        const { tags, currentUserId } = get();
+        if (!currentUserId) return [];
+        return tags.filter((tag) => tag.userId === currentUserId);
       },
     }),
     {

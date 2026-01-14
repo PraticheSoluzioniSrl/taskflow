@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { useTaskStore } from '@/lib/store';
 import { Task } from '@/types';
 import Sidebar from '@/components/Sidebar';
@@ -12,7 +14,17 @@ import TaskModal from '@/components/TaskModal';
 import { cn } from '@/lib/utils';
 
 export default function Home() {
-  const { viewMode, sidebarOpen, projects, filters } = useTaskStore();
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const { viewMode, sidebarOpen, getUserProjects, filters, setCurrentUserId } = useTaskStore();
+  const projects = getUserProjects();
+
+  // Set current user ID when session is available
+  useEffect(() => {
+    if (session?.user?.email) {
+      setCurrentUserId(session.user.email);
+    }
+  }, [session, setCurrentUserId]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultDate, setDefaultDate] = useState<string | undefined>();
@@ -22,6 +34,27 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  // Show loading while checking authentication
+  if (status === 'loading' || !mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated
+  if (status === 'unauthenticated' || !session) {
+    return null;
+  }
 
   const handleAddTask = (date?: string) => {
     setEditingTask(null);
@@ -43,14 +76,6 @@ export default function Home() {
 
   // Get current project name for header
   const currentProject = projects.find((p) => p.id === filters.projectId);
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex">
