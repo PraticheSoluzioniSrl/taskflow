@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (action === 'delete' && task.googleCalendarEventId) {
       await deleteCalendarEvent(task.googleCalendarEventId);
       // Rimuovi l'ID dell'evento dal task
-      await updateTask(task.id, { googleCalendarEventId: null }, session.user.email);
+      await updateTask(task.id, { googleCalendarEventId: undefined }, session.user.email);
       return NextResponse.json({ success: true });
     }
 

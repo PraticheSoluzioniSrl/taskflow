@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Task, PROJECT_COLORS, TAG_COLORS } from '@/types';
 import { useTaskStore } from '@/lib/store';
+import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { cn, formatDate } from '@/lib/utils';
 import {
   X,
@@ -31,7 +32,8 @@ export default function TaskModal({
   onClose,
   defaultDate,
 }: TaskModalProps) {
-  const { addTask, updateTask, getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
+  const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
+  const { addTask: syncAddTask, updateTask: syncUpdateTask } = useDatabaseSync();
   const { data: session } = useSession();
   
   const projects = getUserProjects();
@@ -112,10 +114,10 @@ export default function TaskModal({
 
     let savedTask: Task;
     if (task) {
-      updateTask(task.id, taskData);
+      await syncUpdateTask(task.id, taskData);
       savedTask = { ...task, ...taskData };
     } else {
-      const newTask = addTask(taskData);
+      const newTask = await syncAddTask(taskData);
       savedTask = { ...newTask, ...taskData };
     }
 

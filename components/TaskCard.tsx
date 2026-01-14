@@ -2,6 +2,7 @@
 
 import { Task, Subtask } from '@/types';
 import { useTaskStore } from '@/lib/store';
+import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { formatRelativeDate, isOverdue, cn } from '@/lib/utils';
 import {
   Check,
@@ -36,13 +37,12 @@ export default function TaskCard({
   innerRef,
 }: TaskCardProps) {
   const {
-    toggleTaskComplete,
     toggleTaskImportant,
-    deleteTask,
     toggleSubtaskComplete,
     getUserProjects,
     getUserTags,
   } = useTaskStore();
+  const { updateTask: syncUpdateTask, deleteTask: syncDeleteTask } = useDatabaseSync();
   
   const projects = getUserProjects();
   const tags = getUserTags();
