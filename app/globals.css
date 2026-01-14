@@ -1,0 +1,237 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --background: #0a0f1c;
+  --foreground: #f8fafc;
+  --card: #111827;
+  --card-hover: #1f2937;
+  --border: #1e293b;
+  --border-light: #334155;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-light: rgba(59, 130, 246, 0.1);
+  --accent: #0ea5e9;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --muted: #64748b;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background gradient mesh */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse 80% 50% at 20% -20%, rgba(59, 130, 246, 0.15), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 100%, rgba(14, 165, 233, 0.1), transparent),
+    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(99, 102, 241, 0.05), transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--card);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: var(--foreground);
+}
+
+/* Custom components */
+@layer components {
+  .glass-card {
+    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-800/50 rounded-xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card hover:bg-slate-800/60 hover:border-slate-700/50 transition-all duration-200;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg 
+           transition-all duration-200 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30
+           active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg 
+           border border-slate-700 hover:border-slate-600 transition-all duration-200
+           active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 hover:bg-slate-800/60 text-slate-300 hover:text-white font-medium rounded-lg 
+           transition-all duration-200 active:scale-[0.98];
+  }
+
+  .btn-icon {
+    @apply p-2 hover:bg-slate-800/60 text-slate-400 hover:text-white rounded-lg 
+           transition-all duration-200 active:scale-[0.98];
+  }
+
+  .input-base {
+    @apply w-full px-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-lg
+           text-white placeholder:text-slate-500 
+           focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20
+           transition-all duration-200;
+  }
+
+  .tag-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 
+           hover:text-white hover:bg-slate-800/60 transition-all duration-200;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link text-white bg-blue-600/20 border-l-2 border-blue-500;
+  }
+
+  .task-card {
+    @apply glass-card-hover p-4 cursor-pointer;
+  }
+
+  .task-checkbox {
+    @apply w-5 h-5 rounded-md border-2 border-slate-600 
+           checked:bg-blue-600 checked:border-blue-600
+           focus:ring-2 focus:ring-blue-500/20 focus:ring-offset-0
+           transition-all duration-200 cursor-pointer appearance-none
+           flex items-center justify-center;
+  }
+
+  .important-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full 
+           bg-amber-500/20 text-amber-400 text-xs font-medium;
+  }
+
+  .overdue-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full 
+           bg-red-500/20 text-red-400 text-xs font-medium;
+  }
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Calendar cell styles */
+.calendar-cell {
+  @apply relative p-1 min-h-[100px] border border-slate-800/50 
+         hover:bg-slate-800/30 transition-colors duration-150;
+}
+
+.calendar-cell-today {
+  @apply bg-blue-600/10 border-blue-500/30;
+}
+
+.calendar-cell-selected {
+  @apply bg-blue-600/20 border-blue-500;
+}
+
+/* Kanban column styles */
+.kanban-column {
+  @apply flex flex-col gap-3 p-4 rounded-xl bg-slate-900/40 border border-slate-800/50 min-w-[300px];
+}
+
+.kanban-column-header {
+  @apply flex items-center justify-between pb-3 border-b border-slate-800/50;
+}
+
+/* Drag and drop */
+.dragging {
+  @apply opacity-50 rotate-2 scale-105;
+}
+
+.drag-over {
+  @apply border-2 border-dashed border-blue-500/50 bg-blue-500/5;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-50 
+         flex items-center justify-center p-4;
+}
+
+.modal-content {
+  @apply glass-card p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto
+         animate-scale-in;
+}
+
+/* Toast notifications */
+.toast {
+  @apply glass-card px-4 py-3 flex items-center gap-3 shadow-xl;
+}
+
+/* Date picker */
+.date-picker-dropdown {
+  @apply glass-card p-4 absolute top-full left-0 mt-2 z-50 min-w-[280px];
+}
