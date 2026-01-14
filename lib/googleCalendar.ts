@@ -103,7 +103,7 @@ export async function syncTaskToCalendar(task: Task): Promise<string | null> {
         console.error('Error updating calendar event:', error);
         // Se l'evento non esiste più, creane uno nuovo
         if (response.status === 404) {
-          eventId = null;
+          eventId = undefined;
         } else {
           return null;
         }
