@@ -258,6 +258,62 @@ export function useDatabaseSync() {
     }
   };
 
+  const moveTask = async (taskId: string, newStatus: Task['status']) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    storeUpdateTask(taskId, { status: newStatus });
+    
+    // Sincronizza con il database
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sync task move to database');
+      }
+    } catch (err) {
+      console.error('Error syncing task move to database:', err);
+    }
+  };
+
+  const toggleTaskImportant = async (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    const newImportant = !task.important;
+    storeUpdateTask(taskId, { important: newImportant });
+
+    // Sincronizza con il database
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ important: newImportant }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sync task important toggle to database');
+      }
+    } catch (err) {
+      console.error('Error syncing task important toggle to database:', err);
+    }
+  };
+
+  // Polling periodico per sincronizzare i dati ogni 30 secondi
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.email) {
+      const interval = setInterval(() => {
+        loadFromDatabase();
+      }, 30000); // 30 secondi
+
+      return () => clearInterval(interval);
+    }
+  }, [status, session]);
+
   return {
     isLoading,
     isSyncing,
@@ -267,6 +323,8 @@ export function useDatabaseSync() {
     addTask,
     updateTask,
     deleteTask,
+    moveTask,
+    toggleTaskImportant,
     addProject,
     updateProject,
     deleteProject,

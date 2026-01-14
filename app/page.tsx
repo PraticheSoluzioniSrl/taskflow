@@ -13,6 +13,7 @@ import CalendarView from '@/components/CalendarView';
 import KanbanView from '@/components/KanbanView';
 import TaskModal from '@/components/TaskModal';
 import { cn } from '@/lib/utils';
+import { initNotifications, checkDueTasks } from '@/lib/notifications';
 
 export default function Home() {
   const { data: session, status } = useSession();
@@ -29,6 +30,25 @@ export default function Home() {
       setCurrentUserId(session.user.email);
     }
   }, [session, setCurrentUserId]);
+
+  // Inizializza le notifiche quando l'utente è autenticato
+  useEffect(() => {
+    if (status === 'authenticated') {
+      initNotifications();
+    }
+  }, [status]);
+
+  // Controlla i task in scadenza ogni minuto
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    const interval = setInterval(() => {
+      const allTasks = useTaskStore.getState().tasks;
+      checkDueTasks(allTasks);
+    }, 60000); // Ogni minuto
+
+    return () => clearInterval(interval);
+  }, [status]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [defaultDate, setDefaultDate] = useState<string | undefined>();

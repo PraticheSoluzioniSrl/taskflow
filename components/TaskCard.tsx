@@ -37,12 +37,15 @@ export default function TaskCard({
   innerRef,
 }: TaskCardProps) {
   const {
-    toggleTaskImportant,
     toggleSubtaskComplete,
     getUserProjects,
     getUserTags,
   } = useTaskStore();
-  const { updateTask: syncUpdateTask, deleteTask: syncDeleteTask } = useDatabaseSync();
+  const { 
+    updateTask: syncUpdateTask, 
+    deleteTask: syncDeleteTask,
+    toggleTaskImportant: syncToggleTaskImportant 
+  } = useDatabaseSync();
   
   const projects = getUserProjects();
   const tags = getUserTags();
