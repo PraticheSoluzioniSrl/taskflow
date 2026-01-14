@@ -44,7 +44,7 @@ export default function Home() {
 
     const interval = setInterval(() => {
       const allTasks = useTaskStore.getState().tasks;
-      checkDueTasks(allTasks);
+      checkDueTasks(allTasks, 15); // 15 minuti prima della scadenza
     }, 60000); // Ogni minuto
 
     return () => clearInterval(interval);

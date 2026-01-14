@@ -406,10 +406,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {/* Footer */}
       <div className="p-4 border-t border-slate-800/50 space-y-3">
         <GoogleCalendarSync />
-        <a href="/settings" className="sidebar-link w-full">
+        <Link href="/settings" className="sidebar-link w-full">
           <Settings className="w-5 h-5" />
           <span>Impostazioni</span>
-        </a>
+        </Link>
       </div>
     </aside>
   );
