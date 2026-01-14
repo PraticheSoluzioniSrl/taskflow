@@ -281,10 +281,10 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
     values.push(taskId, userId);
 
     if (updateFields.length > 1) {
-      await db.sql.query(
-        `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
-        values
-      );
+      // Costruisci la query dinamica usando template literals
+      const query = `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
+      // Usa una query raw per aggiornamenti dinamici
+      await db.sql.unsafe(query, values);
     }
 
     // Aggiorna i tag se necessario
@@ -394,10 +394,8 @@ export async function updateProject(projectId: string, updates: Partial<Project>
     values.push(projectId, userId);
 
     if (updateFields.length > 0) {
-      await db.sql.query(
-        `UPDATE projects SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
-        values
-      );
+      const query = `UPDATE projects SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
+      await db.sql.unsafe(query, values);
     }
   } catch (error) {
     console.error('Error updating project:', error);
@@ -474,10 +472,8 @@ export async function updateTag(tagId: string, updates: Partial<Tag>, userId: st
     values.push(tagId, userId);
 
     if (updateFields.length > 0) {
-      await db.sql.query(
-        `UPDATE tags SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`,
-        values
-      );
+      const query = `UPDATE tags SET ${updateFields.join(', ')} WHERE id = $${paramIndex++} AND user_id = $${paramIndex++}`;
+      await db.sql.unsafe(query, values);
     }
   } catch (error) {
     console.error('Error updating tag:', error);
