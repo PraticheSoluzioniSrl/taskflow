@@ -69,12 +69,12 @@ export class NotificationService {
     }
 
     if (Notification.permission === 'granted') {
-      const notification = new Notification(title, {
+      const notificationOptions: NotificationOptions = {
         icon: '/icon-192.png',
         badge: '/icon-192.png',
-        vibrate: [200, 100, 200],
         ...options,
-      });
+      };
+      const notification = new Notification(title, notificationOptions);
 
       // Suono (se abilitato)
       if (options?.sound !== false) {

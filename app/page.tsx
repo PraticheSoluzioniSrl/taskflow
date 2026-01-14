@@ -22,7 +22,7 @@ export default function Home() {
   const projects = getUserProjects();
   
   // Sincronizzazione con il database
-  const { isLoading: isSyncing } = useDatabaseSync();
+  const { isSyncing } = useDatabaseSync();
 
   // Set current user ID when session is available
   useEffect(() => {

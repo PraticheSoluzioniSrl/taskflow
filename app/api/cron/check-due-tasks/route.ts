@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/authOptions';
 
 // Questo endpoint può essere chiamato da un cron job Vercel
 // per controllare i task in scadenza e inviare notifiche
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // Verifica che la richiesta provenga da Vercel Cron

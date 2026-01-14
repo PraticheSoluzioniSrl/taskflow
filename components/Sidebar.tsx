@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import { useTaskStore } from '@/lib/store';
 import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { PROJECT_COLORS } from '@/types';

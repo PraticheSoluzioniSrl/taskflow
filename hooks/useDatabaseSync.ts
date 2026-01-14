@@ -38,6 +38,7 @@ export function useDatabaseSync() {
     if (!session?.user?.email) return;
 
     setIsLoading(true);
+    setIsSyncing(true);
     setError(null);
 
     try {
@@ -75,6 +76,7 @@ export function useDatabaseSync() {
       // In caso di errore, continuiamo con i dati locali
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   };
 
