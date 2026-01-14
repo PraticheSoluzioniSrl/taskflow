@@ -74,10 +74,10 @@ export default function TaskCard({
         <button
           onClick={async (e) => {
             e.stopPropagation();
-            toggleTaskComplete(task.id);
+            const updatedTask = { ...task, completed: !task.completed };
+            await syncUpdateTask(task.id, { completed: !task.completed });
             // Sincronizza con Google Calendar quando si completa/uncompleta
             if (task.dueDate) {
-              const updatedTask = { ...task, completed: !task.completed };
               try {
                 await fetch('/api/calendar/sync', {
                   method: 'POST',
@@ -249,13 +249,17 @@ export default function TaskCard({
                           e.stopPropagation();
                           // Elimina anche l'evento da Google Calendar se esiste
                           if (task.googleCalendarEventId) {
-                            fetch('/api/calendar/sync', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ task, action: 'delete' }),
-                            }).catch(console.error);
+                            try {
+                              await fetch('/api/calendar/sync', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ task, action: 'delete' }),
+                              });
+                            } catch (error) {
+                              console.error('Error deleting calendar event:', error);
+                            }
                           }
-                          deleteTask(task.id);
+                          await syncDeleteTask(task.id);
                           setShowMenu(false);
                         }}
                         className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg"
