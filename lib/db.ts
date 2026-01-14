@@ -232,70 +232,41 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
 
 export async function updateTask(taskId: string, updates: Partial<Task>, userId: string): Promise<void> {
   try {
-    const updateFields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-
+    // Costruisci le query statiche per ogni campo da aggiornare
     if (updates.title !== undefined) {
-      updateFields.push(`title = $${paramIndex++}`);
-      values.push(updates.title);
+      await db.sql`UPDATE tasks SET title = ${updates.title}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.description !== undefined) {
-      updateFields.push(`description = $${paramIndex++}`);
-      values.push(updates.description);
+      await db.sql`UPDATE tasks SET description = ${updates.description || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.completed !== undefined) {
-      updateFields.push(`completed = $${paramIndex++}`);
-      values.push(updates.completed);
+      await db.sql`UPDATE tasks SET completed = ${updates.completed}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.important !== undefined) {
-      updateFields.push(`important = $${paramIndex++}`);
-      values.push(updates.important);
+      await db.sql`UPDATE tasks SET important = ${updates.important}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.dueDate !== undefined) {
-      updateFields.push(`due_date = $${paramIndex++}`);
-      values.push(updates.dueDate);
+      await db.sql`UPDATE tasks SET due_date = ${updates.dueDate || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.dueTime !== undefined) {
-      updateFields.push(`due_time = $${paramIndex++}`);
-      values.push(updates.dueTime);
+      await db.sql`UPDATE tasks SET due_time = ${updates.dueTime || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.reminder !== undefined) {
-      updateFields.push(`reminder = $${paramIndex++}`);
-      values.push(updates.reminder);
+      await db.sql`UPDATE tasks SET reminder = ${updates.reminder || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.status !== undefined) {
-      updateFields.push(`status = $${paramIndex++}`);
-      values.push(updates.status);
+      await db.sql`UPDATE tasks SET status = ${updates.status}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.projectId !== undefined) {
-      updateFields.push(`project_id = $${paramIndex++}`);
-      values.push(updates.projectId);
+      await db.sql`UPDATE tasks SET project_id = ${updates.projectId || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.googleCalendarEventId !== undefined) {
-      updateFields.push(`google_calendar_event_id = $${paramIndex++}`);
-      values.push(updates.googleCalendarEventId);
+      await db.sql`UPDATE tasks SET google_calendar_event_id = ${updates.googleCalendarEventId || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
-
-    updateFields.push(`updated_at = NOW()`);
-
-    if (updateFields.length > 1) {
-      // Costruisci la query usando template literals con valori interpolati
-      const setClause = updateFields.map((field, idx) => {
-        const value = values[idx];
-        if (value === null || value === undefined) {
-          return field.split('=')[0].trim() + ' = NULL';
-        }
-        if (typeof value === 'string') {
-          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
-        }
-        if (typeof value === 'boolean') {
-          return field.split('=')[0].trim() + ` = ${value}`;
-        }
-        return field.split('=')[0].trim() + ` = ${value}`;
-      }).join(', ');
-      
-      await db.sql`UPDATE tasks SET ${db.sql.raw(setClause)} WHERE id = ${taskId} AND user_id = ${userId}`;
+    
+    // Se non ci sono aggiornamenti specifici, aggiorna solo updated_at
+    if (Object.keys(updates).length === 0) {
+      await db.sql`UPDATE tasks SET updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
 
     // Aggiorna i tag se necessario
@@ -389,32 +360,11 @@ export async function createProject(project: Omit<Project, 'id' | 'createdAt'>):
 
 export async function updateProject(projectId: string, updates: Partial<Project>, userId: string): Promise<void> {
   try {
-    const updateFields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-
     if (updates.name !== undefined) {
-      updateFields.push(`name = $${paramIndex++}`);
-      values.push(updates.name);
+      await db.sql`UPDATE projects SET name = ${updates.name} WHERE id = ${projectId} AND user_id = ${userId}`;
     }
     if (updates.color !== undefined) {
-      updateFields.push(`color = $${paramIndex++}`);
-      values.push(updates.color);
-    }
-
-    if (updateFields.length > 0) {
-      const setClause = updateFields.map((field, idx) => {
-        const value = values[idx];
-        if (value === null || value === undefined) {
-          return field.split('=')[0].trim() + ' = NULL';
-        }
-        if (typeof value === 'string') {
-          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
-        }
-        return field.split('=')[0].trim() + ` = ${value}`;
-      }).join(', ');
-      
-      await db.sql`UPDATE projects SET ${db.sql.raw(setClause)} WHERE id = ${projectId} AND user_id = ${userId}`;
+      await db.sql`UPDATE projects SET color = ${updates.color} WHERE id = ${projectId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating project:', error);
@@ -475,32 +425,11 @@ export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
 
 export async function updateTag(tagId: string, updates: Partial<Tag>, userId: string): Promise<void> {
   try {
-    const updateFields: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
-
     if (updates.name !== undefined) {
-      updateFields.push(`name = $${paramIndex++}`);
-      values.push(updates.name);
+      await db.sql`UPDATE tags SET name = ${updates.name} WHERE id = ${tagId} AND user_id = ${userId}`;
     }
     if (updates.color !== undefined) {
-      updateFields.push(`color = $${paramIndex++}`);
-      values.push(updates.color);
-    }
-
-    if (updateFields.length > 0) {
-      const setClause = updateFields.map((field, idx) => {
-        const value = values[idx];
-        if (value === null || value === undefined) {
-          return field.split('=')[0].trim() + ' = NULL';
-        }
-        if (typeof value === 'string') {
-          return field.split('=')[0].trim() + ` = '${value.replace(/'/g, "''")}'`;
-        }
-        return field.split('=')[0].trim() + ` = ${value}`;
-      }).join(', ');
-      
-      await db.sql`UPDATE tags SET ${db.sql.raw(setClause)} WHERE id = ${tagId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tags SET color = ${updates.color} WHERE id = ${tagId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating tag:', error);
