@@ -245,7 +245,7 @@ export default function TaskCard({
                         Modifica
                       </button>
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
                           // Elimina anche l'evento da Google Calendar se esiste
                           if (task.googleCalendarEventId) {
