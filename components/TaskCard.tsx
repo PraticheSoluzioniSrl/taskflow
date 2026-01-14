@@ -203,9 +203,9 @@ export default function TaskCard({
             {/* Actions */}
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  toggleTaskImportant(task.id);
+                  await syncToggleTaskImportant(task.id);
                 }}
                 className={cn(
                   'btn-icon p-1.5',
