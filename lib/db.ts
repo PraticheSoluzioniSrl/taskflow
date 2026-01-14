@@ -1,12 +1,16 @@
 import { createClient } from '@vercel/postgres';
 import { Task, Project, Tag } from '@/types';
 
-// Crea il client del database
-const db = createClient();
+// Funzione helper per ottenere il client del database
+// Creiamo il client solo quando necessario, non a livello di modulo
+function getDb() {
+  return createClient();
+}
 
 // Inizializza le tabelle del database (da chiamare una volta)
 export async function initDatabase() {
   try {
+    const db = getDb();
     // Crea tabella users
     await db.sql`
       CREATE TABLE IF NOT EXISTS users (
@@ -96,6 +100,7 @@ export async function initDatabase() {
 // Funzioni per gestire gli utenti
 export async function createOrUpdateUser(userId: string, email: string, name?: string, image?: string) {
   try {
+    const db = getDb();
     await db.sql`
       INSERT INTO users (id, email, name, image)
       VALUES (${userId}, ${email}, ${name || null}, ${image || null})
@@ -114,6 +119,7 @@ export async function createOrUpdateUser(userId: string, email: string, name?: s
 // Funzioni per gestire i task
 export async function getTasksByUserId(userId: string): Promise<Task[]> {
   try {
+    const db = getDb();
     // Prima recupera i task
     const tasksResult = await db.sql`
       SELECT * FROM tasks
@@ -177,6 +183,7 @@ export async function getTasksByUserId(userId: string): Promise<Task[]> {
 
 export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order'>): Promise<Task> {
   try {
+    const db = getDb();
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -232,6 +239,7 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
 
 export async function updateTask(taskId: string, updates: Partial<Task>, userId: string): Promise<void> {
   try {
+    const db = getDb();
     // Costruisci le query statiche per ogni campo da aggiornare
     if (updates.title !== undefined) {
       await db.sql`UPDATE tasks SET title = ${updates.title}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
@@ -306,6 +314,7 @@ export async function updateTask(taskId: string, updates: Partial<Task>, userId:
 
 export async function deleteTask(taskId: string, userId: string): Promise<void> {
   try {
+    const db = getDb();
     await db.sql`
       DELETE FROM tasks
       WHERE id = ${taskId} AND user_id = ${userId};
@@ -319,6 +328,7 @@ export async function deleteTask(taskId: string, userId: string): Promise<void> 
 // Funzioni per gestire i progetti
 export async function getProjectsByUserId(userId: string): Promise<Project[]> {
   try {
+    const db = getDb();
     const result = await db.sql`
       SELECT * FROM projects
       WHERE user_id = ${userId}
@@ -339,6 +349,7 @@ export async function getProjectsByUserId(userId: string): Promise<Project[]> {
 
 export async function createProject(project: Omit<Project, 'id' | 'createdAt'>): Promise<Project> {
   try {
+    const db = getDb();
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -360,6 +371,7 @@ export async function createProject(project: Omit<Project, 'id' | 'createdAt'>):
 
 export async function updateProject(projectId: string, updates: Partial<Project>, userId: string): Promise<void> {
   try {
+    const db = getDb();
     if (updates.name !== undefined) {
       await db.sql`UPDATE projects SET name = ${updates.name} WHERE id = ${projectId} AND user_id = ${userId}`;
     }
@@ -374,6 +386,7 @@ export async function updateProject(projectId: string, updates: Partial<Project>
 
 export async function deleteProject(projectId: string, userId: string): Promise<void> {
   try {
+    const db = getDb();
     await db.sql`
       DELETE FROM projects
       WHERE id = ${projectId} AND user_id = ${userId};
@@ -387,6 +400,7 @@ export async function deleteProject(projectId: string, userId: string): Promise<
 // Funzioni per gestire i tag
 export async function getTagsByUserId(userId: string): Promise<Tag[]> {
   try {
+    const db = getDb();
     const result = await db.sql`
       SELECT * FROM tags
       WHERE user_id = ${userId}
@@ -406,6 +420,7 @@ export async function getTagsByUserId(userId: string): Promise<Tag[]> {
 
 export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
   try {
+    const db = getDb();
     const tagId = crypto.randomUUID();
 
     await db.sql`
@@ -425,6 +440,7 @@ export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
 
 export async function updateTag(tagId: string, updates: Partial<Tag>, userId: string): Promise<void> {
   try {
+    const db = getDb();
     if (updates.name !== undefined) {
       await db.sql`UPDATE tags SET name = ${updates.name} WHERE id = ${tagId} AND user_id = ${userId}`;
     }
@@ -439,6 +455,7 @@ export async function updateTag(tagId: string, updates: Partial<Tag>, userId: st
 
 export async function deleteTag(tagId: string, userId: string): Promise<void> {
   try {
+    const db = getDb();
     await db.sql`
       DELETE FROM tags
       WHERE id = ${tagId} AND user_id = ${userId};
