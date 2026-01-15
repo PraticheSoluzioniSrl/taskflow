@@ -26,30 +26,44 @@ export function useDatabaseSync() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  // Carica i dati dal database quando l'utente si logga
+  // Carica i dati dal database quando l'utente si logga (solo una volta)
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email) {
-      loadFromDatabase();
+    if (status === 'authenticated' && session?.user?.email && !hasLoadedOnce) {
+      loadFromDatabase(true);
     }
-  }, [status, session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session?.user?.email]);
 
-  const loadFromDatabase = async () => {
+  const loadFromDatabase = async (isInitialLoad = false) => {
     if (!session?.user?.email) return;
 
-    setIsLoading(true);
-    setIsSyncing(true);
+    if (isInitialLoad) {
+      setIsLoading(true);
+      setIsSyncing(true);
+    }
     setError(null);
 
     try {
       const userId = session.user.email;
       setCurrentUserId(userId);
 
-      // Carica tasks, projects e tags dal database
+      // Carica tasks, projects e tags dal database con timeout
+      const fetchWithTimeout = (url: string, timeout: number) => {
+        return Promise.race([
+          fetch(url),
+          new Promise<Response>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), timeout)
+          ),
+        ]);
+      };
+
+      const timeout = isInitialLoad ? 10000 : 30000; // 10s per il primo caricamento, 30s per il polling
       const [tasksRes, projectsRes, tagsRes] = await Promise.all([
-        fetch('/api/tasks'),
-        fetch('/api/projects'),
-        fetch('/api/tags'),
+        fetchWithTimeout('/api/tasks', timeout),
+        fetchWithTimeout('/api/projects', timeout),
+        fetchWithTimeout('/api/tags', timeout),
       ]);
 
       if (!tasksRes.ok || !projectsRes.ok || !tagsRes.ok) {
@@ -70,13 +84,20 @@ export function useDatabaseSync() {
         projects: projectsData || [],
         tags: tagsData || [],
       });
+      setHasLoadedOnce(true);
     } catch (err) {
       console.error('Error loading from database:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
       // In caso di errore, continuiamo con i dati locali
+      // Se è il primo caricamento, impostiamo comunque hasLoadedOnce per permettere all'app di funzionare
+      if (isInitialLoad) {
+        setHasLoadedOnce(true);
+      }
     } finally {
-      setIsLoading(false);
-      setIsSyncing(false);
+      if (isInitialLoad) {
+        setIsLoading(false);
+        setIsSyncing(false);
+      }
     }
   };
 
@@ -305,16 +326,16 @@ export function useDatabaseSync() {
     }
   };
 
-  // Polling periodico per sincronizzare i dati ogni 30 secondi
+  // Polling periodico per sincronizzare i dati ogni 30 secondi (solo dopo il primo caricamento)
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email) {
+    if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
       const interval = setInterval(() => {
-        loadFromDatabase();
+        loadFromDatabase(false); // Non è il primo caricamento, quindi non mostriamo il loading
       }, 30000); // 30 secondi
 
       return () => clearInterval(interval);
     }
-  }, [status, session]);
+  }, [status, session, hasLoadedOnce]);
 
   return {
     isLoading,

@@ -66,15 +66,12 @@ export default function Home() {
     }
   }, [status, router]);
 
-  // Show loading while checking authentication or syncing
-  if (status === 'loading' || !mounted || isSyncing) {
+  // Show loading while checking authentication or initial data loading
+  if (status === 'loading' || !mounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         <div className="text-center">
           <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          {isSyncing && (
-            <p className="text-slate-400 text-sm">Sincronizzazione dati...</p>
-          )}
         </div>
       </div>
     );
