@@ -31,4 +31,7 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
+  // Assicurati che l'URL sia configurato correttamente
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
 };
