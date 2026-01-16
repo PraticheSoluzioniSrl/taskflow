@@ -45,6 +45,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     setCurrentUserId,
     getUserProjects,
     getUserTags,
+    currentUserId,
   } = useTaskStore();
   const { addProject: syncAddProject, addTag: syncAddTag } = useDatabaseSync();
 
@@ -68,11 +69,31 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState(PROJECT_COLORS[0]);
 
-  const importantCount = tasks.filter((t) => t.important && !t.completed).length;
-  const overdueCount = tasks.filter((t) => {
-    if (!t.dueDate || t.completed) return false;
-    return new Date(t.dueDate) < new Date(new Date().toDateString());
-  }).length;
+  const importantCount = userProjects.length > 0 || userTags.length > 0 
+    ? tasks.filter((t) => {
+        if (currentUserId && t.userId !== currentUserId) return false;
+        return t.important && !t.completed;
+      }).length
+    : tasks.filter((t) => t.important && !t.completed).length;
+  
+  const overdueCount = userProjects.length > 0 || userTags.length > 0
+    ? tasks.filter((t) => {
+        if (currentUserId && t.userId !== currentUserId) return false;
+        if (!t.dueDate || t.completed) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dueDate = new Date(t.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate < today;
+      }).length
+    : tasks.filter((t) => {
+        if (!t.dueDate || t.completed) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dueDate = new Date(t.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate < today;
+      }).length;
 
   const handleAddProject = async () => {
     if (newProjectName.trim() && session?.user?.email) {

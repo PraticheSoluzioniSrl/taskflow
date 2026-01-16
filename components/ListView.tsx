@@ -127,9 +127,14 @@ export default function ListView({ onEditTask }: ListViewProps) {
     );
   }
 
+  // Se il filtro "In Ritardo" è attivo, mostra solo i task in ritardo
+  const displaySections = filters.showOverdueOnly
+    ? sections.filter(s => s.key === 'overdue')
+    : sections;
+
   return (
     <div className="space-y-8">
-      {sections.map((section) => {
+      {displaySections.map((section) => {
         const sectionTasks = groupedTasks[section.key];
         if (sectionTasks.length === 0) return null;
 

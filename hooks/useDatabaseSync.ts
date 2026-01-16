@@ -341,7 +341,20 @@ export function useDatabaseSync() {
 
       return () => clearInterval(interval);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.email, hasLoadedOnce]);
+  
+  // Sincronizzazione immediata dopo modifiche (con debounce)
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
+      const timeout = setTimeout(() => {
+        loadFromDatabase(false);
+      }, 2000); // Aspetta 2 secondi dopo l'ultima modifica
+      
+      return () => clearTimeout(timeout);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length, projects.length, tags.length]);
 
   return {
     isLoading,

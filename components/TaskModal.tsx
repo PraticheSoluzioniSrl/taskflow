@@ -17,6 +17,7 @@ import {
   Plus,
   Trash2,
   ChevronDown,
+  Check,
 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -116,41 +117,65 @@ export default function TaskModal({
     if (task) {
       await syncUpdateTask(task.id, taskData);
       savedTask = { ...task, ...taskData };
+      
+      // Sincronizza con Google Calendar se c'è una data
+      if (dueDate) {
+        try {
+          const syncResponse = await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task: savedTask, action: 'sync' }),
+          });
+          
+          if (syncResponse.ok) {
+            const syncData = await syncResponse.json();
+            // Aggiorna il task con l'eventId se è stato creato/aggiornato
+            if (syncData.eventId && syncData.eventId !== savedTask.googleCalendarEventId) {
+              await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+            }
+          }
+        } catch (error) {
+          console.error('Error syncing to calendar:', error);
+        }
+      } else if (task.googleCalendarEventId && !dueDate) {
+        // Se il task aveva una data ma ora non ce l'ha più, elimina l'evento
+        try {
+          await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task: savedTask, action: 'delete' }),
+          });
+        } catch (error) {
+          console.error('Error deleting calendar event:', error);
+        }
+      }
     } else {
       const newTask = await syncAddTask(taskData);
       // Il task restituito da syncAddTask potrebbe avere un ID diverso se sincronizzato con il DB
       savedTask = newTask;
-    }
-
-    // Sincronizza con Google Calendar se c'è una data
-    if (dueDate) {
-      try {
-        const syncResponse = await fetch('/api/calendar/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: savedTask, action: 'sync' }),
-        });
-        
-        if (syncResponse.ok) {
-          const syncData = await syncResponse.json();
-          // Aggiorna il task con l'eventId se è stato creato/aggiornato
-          if (syncData.eventId && syncData.eventId !== savedTask.googleCalendarEventId) {
-            await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+      
+      // Sincronizza con Google Calendar se c'è una data (solo dopo che il task è stato salvato nel DB)
+      if (dueDate && savedTask.id) {
+        try {
+          // Aspetta un attimo per assicurarsi che il task sia stato salvato nel DB
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          const syncResponse = await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task: savedTask, action: 'sync' }),
+          });
+          
+          if (syncResponse.ok) {
+            const syncData = await syncResponse.json();
+            // Aggiorna il task con l'eventId se è stato creato
+            if (syncData.eventId) {
+              await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+            }
           }
+        } catch (error) {
+          console.error('Error syncing to calendar:', error);
         }
-      } catch (error) {
-        console.error('Error syncing to calendar:', error);
-      }
-    } else if (task?.googleCalendarEventId && !dueDate) {
-      // Se il task aveva una data ma ora non ce l'ha più, elimina l'evento
-      try {
-        await fetch('/api/calendar/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ task: savedTask, action: 'delete' }),
-        });
-      } catch (error) {
-        console.error('Error deleting calendar event:', error);
       }
     }
 

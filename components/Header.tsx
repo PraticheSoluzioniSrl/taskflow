@@ -12,9 +12,14 @@ import {
   Bell,
   User,
   X,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Task } from '@/types';
+import { formatRelativeDate, isOverdue } from '@/lib/utils';
 
 interface HeaderProps {
   onAddTask: () => void;
@@ -30,8 +35,82 @@ export default function Header({ onAddTask }: HeaderProps) {
     sidebarOpen,
   } = useTaskStore();
   const { data: session } = useSession();
+  const { tasks } = useTaskStore();
 
   const [searchFocused, setSearchFocused] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Chiudi il dropdown quando si clicca fuori
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    if (notificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationsOpen]);
+
+  // Calcola le notifiche: task in ritardo e task con promemoria prossimi
+  const notifications = (() => {
+    const now = new Date();
+    const notificationsList: Array<{ type: 'overdue' | 'reminder' | 'upcoming'; task: Task; message: string }> = [];
+
+    tasks.forEach((task) => {
+      // Task in ritardo
+      if (task.dueDate && !task.completed && isOverdue(task.dueDate)) {
+        notificationsList.push({
+          type: 'overdue',
+          task,
+          message: `Task in ritardo: ${task.title}`,
+        });
+      }
+
+      // Promemoria prossimi (nelle prossime 24 ore)
+      if (task.reminder && !task.completed) {
+        const reminderDate = new Date(task.reminder);
+        const hoursUntilReminder = (reminderDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+        if (hoursUntilReminder > 0 && hoursUntilReminder <= 24) {
+          notificationsList.push({
+            type: 'reminder',
+            task,
+            message: `Promemoria: ${task.title}`,
+          });
+        }
+      }
+
+      // Task in scadenza oggi
+      if (task.dueDate && !task.completed) {
+        const dueDate = new Date(task.dueDate);
+        dueDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (dueDate.getTime() === today.getTime()) {
+          notificationsList.push({
+            type: 'upcoming',
+            task,
+            message: `Scade oggi: ${task.title}`,
+          });
+        }
+      }
+    });
+
+    return notificationsList.sort((a, b) => {
+      // Prima i task in ritardo, poi i promemoria, poi quelli in scadenza
+      if (a.type === 'overdue' && b.type !== 'overdue') return -1;
+      if (a.type !== 'overdue' && b.type === 'overdue') return 1;
+      return 0;
+    });
+  })();
+
+  const unreadCount = notifications.length;
 
   const viewOptions = [
     { id: 'list', icon: LayoutList, label: 'Lista' },
@@ -108,10 +187,89 @@ export default function Header({ onAddTask }: HeaderProps) {
             <span className="hidden sm:inline">Nuovo Task</span>
           </button>
 
-          <button className="btn-icon relative">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full" />
-          </button>
+          <div className="relative" ref={notificationsRef}>
+            <button
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              className="btn-icon relative"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-medium">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {notificationsOpen && (
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 glass-card p-0 shadow-2xl z-50 max-h-96 overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-slate-800/50">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-white">Notifiche</h3>
+                    {unreadCount > 0 && (
+                      <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded-full text-xs">
+                        {unreadCount} nuove
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  {notifications.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Bell className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400 text-sm">Nessuna notifica</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-800/50">
+                      {notifications.map((notification, index) => (
+                        <div
+                          key={`${notification.task.id}-${index}`}
+                          className={cn(
+                            'p-4 hover:bg-slate-800/50 transition-colors cursor-pointer',
+                            notification.type === 'overdue' && 'bg-red-500/5'
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={cn(
+                              'mt-0.5 p-2 rounded-lg',
+                              notification.type === 'overdue' && 'bg-red-500/20',
+                              notification.type === 'reminder' && 'bg-blue-500/20',
+                              notification.type === 'upcoming' && 'bg-amber-500/20'
+                            )}>
+                              {notification.type === 'overdue' && (
+                                <AlertCircle className="w-4 h-4 text-red-400" />
+                              )}
+                              {notification.type === 'reminder' && (
+                                <Bell className="w-4 h-4 text-blue-400" />
+                              )}
+                              {notification.type === 'upcoming' && (
+                                <Clock className="w-4 h-4 text-amber-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white mb-1">
+                                {notification.message}
+                              </p>
+                              {notification.task.dueDate && (
+                                <p className="text-xs text-slate-400">
+                                  {formatRelativeDate(notification.task.dueDate)}
+                                  {notification.task.dueTime && ` alle ${notification.task.dueTime}`}
+                                </p>
+                              )}
+                              {notification.task.reminder && notification.type === 'reminder' && (
+                                <p className="text-xs text-slate-400">
+                                  Promemoria: {new Date(notification.task.reminder).toLocaleString('it-IT')}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           <button className="btn-icon">
             {session?.user?.image ? (
