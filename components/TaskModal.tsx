@@ -34,7 +34,7 @@ export default function TaskModal({
   defaultDate,
 }: TaskModalProps) {
   const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
-  const { addTask: syncAddTask, updateTask: syncUpdateTask } = useDatabaseSync();
+  const { addTask: syncAddTask, updateTask: syncUpdateTask, loadFromDatabase } = useDatabaseSync();
   const { data: session } = useSession();
   
   const projects = getUserProjects();
@@ -151,14 +151,24 @@ export default function TaskModal({
       }
     } else {
       const newTask = await syncAddTask(taskData);
-      // Il task restituito da syncAddTask potrebbe avere un ID diverso se sincronizzato con il DB
+      // Il task restituito da syncAddTask ora ha sempre l'ID dal database
       savedTask = newTask;
       
       // Sincronizza con Google Calendar se c'è una data (solo dopo che il task è stato salvato nel DB)
       if (dueDate && savedTask.id) {
         try {
           // Aspetta un attimo per assicurarsi che il task sia stato salvato nel DB
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Ricarica il task dal database per assicurarsi di avere i dati più recenti
+          const taskResponse = await fetch(`/api/tasks`);
+          if (taskResponse.ok) {
+            const allTasks = await taskResponse.json();
+            const latestTask = allTasks.find((t: Task) => t.id === savedTask.id);
+            if (latestTask) {
+              savedTask = latestTask;
+            }
+          }
           
           const syncResponse = await fetch('/api/calendar/sync', {
             method: 'POST',
@@ -171,7 +181,16 @@ export default function TaskModal({
             // Aggiorna il task con l'eventId se è stato creato
             if (syncData.eventId) {
               await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+              // Ricarica i dati dal database per sincronizzare tutti i dispositivi
+              setTimeout(() => {
+                if (session?.user?.email) {
+                  loadFromDatabase(false);
+                }
+              }, 500);
             }
+          } else {
+            const errorData = await syncResponse.json();
+            console.error('Error syncing to calendar:', errorData);
           }
         } catch (error) {
           console.error('Error syncing to calendar:', error);

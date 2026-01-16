@@ -30,6 +30,9 @@ export async function POST(request: NextRequest) {
     if (eventId) {
       // Aggiorna il task con l'ID dell'evento
       await updateTask(task.id, { googleCalendarEventId: eventId }, session.user.email);
+      console.log(`[Calendar Sync] Task ${task.id} synced to Google Calendar with event ID: ${eventId}`);
+    } else {
+      console.warn(`[Calendar Sync] Failed to sync task ${task.id} to Google Calendar`);
     }
 
     return NextResponse.json({ success: true, eventId });

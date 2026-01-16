@@ -34,13 +34,14 @@ async function getAccessToken(): Promise<string | null> {
     const accessToken = (session as any)?.accessToken;
     
     if (!accessToken) {
-      console.error('No access token available in session');
+      console.error('[Google Calendar] No access token available in session');
+      console.error('[Google Calendar] Session:', session ? 'exists' : 'null');
       return null;
     }
     
     return accessToken;
   } catch (error) {
-    console.error('Error getting access token:', error);
+    console.error('[Google Calendar] Error getting access token:', error);
     return null;
   }
 }
@@ -107,13 +108,19 @@ export async function syncTaskToCalendar(task: Task): Promise<string | null> {
 
       if (!response.ok) {
         const error = await response.text();
-        console.error('Error updating calendar event:', error);
+        console.error('[Google Calendar] Error updating calendar event:', response.status, error);
         // Se l'evento non esiste più, creane uno nuovo
         if (response.status === 404) {
+          console.log('[Google Calendar] Event not found, creating new one');
           eventId = undefined;
+        } else if (response.status === 401) {
+          console.error('[Google Calendar] Unauthorized - access token may be expired');
+          return null;
         } else {
           return null;
         }
+      } else {
+        console.log(`[Google Calendar] Successfully updated event ${eventId} for task ${task.id}`);
       }
     }
 
@@ -133,11 +140,15 @@ export async function syncTaskToCalendar(task: Task): Promise<string | null> {
 
       if (!response.ok) {
         const error = await response.text();
-        console.error('Error creating calendar event:', error);
+        console.error('[Google Calendar] Error creating calendar event:', response.status, error);
+        if (response.status === 401) {
+          console.error('[Google Calendar] Unauthorized - access token may be expired');
+        }
         return null;
       }
 
       const createdEvent = await response.json();
+      console.log(`[Google Calendar] Successfully created event ${createdEvent.id} for task ${task.id}`);
       return createdEvent.id;
     }
 

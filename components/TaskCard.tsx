@@ -44,7 +44,8 @@ export default function TaskCard({
   const { 
     updateTask: syncUpdateTask, 
     deleteTask: syncDeleteTask,
-    toggleTaskImportant: syncToggleTaskImportant 
+    toggleTaskImportant: syncToggleTaskImportant,
+    loadFromDatabase
   } = useDatabaseSync();
   
   const projects = getUserProjects();
@@ -87,6 +88,10 @@ export default function TaskCard({
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ task: updatedTask, action: 'sync' }),
                 });
+                // Ricarica i dati per sincronizzare tutti i dispositivi
+                setTimeout(() => {
+                  loadFromDatabase(false);
+                }, 500);
               } catch (error) {
                 console.error('Error syncing to calendar:', error);
               }

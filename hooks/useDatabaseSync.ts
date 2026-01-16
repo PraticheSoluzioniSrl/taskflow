@@ -78,12 +78,18 @@ export function useDatabaseSync() {
 
       // Aggiorna lo store con i dati dal database
       // Sostituiamo completamente i dati locali con quelli del database per garantire sincronizzazione
+      // Questo assicura che tutti i dispositivi vedano gli stessi dati
       useTaskStore.setState({
         tasks: tasksData || [],
         projects: projectsData || [],
         tags: tagsData || [],
       });
       setHasLoadedOnce(true);
+      
+      // Log per debug (solo in sviluppo)
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Sync] Loaded ${tasksData?.length || 0} tasks, ${projectsData?.length || 0} projects, ${tagsData?.length || 0} tags`);
+      }
     } catch (err) {
       console.error('Error loading from database:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -126,12 +132,14 @@ export function useDatabaseSync() {
       useTaskStore.setState({
         tasks: [...tasks.filter(t => t.id !== newTask.id), syncedTask],
       });
+      
+      // Restituisci il task sincronizzato dal database invece di quello locale
+      return syncedTask;
     } catch (err) {
       console.error('Error syncing task to database:', err);
       // Continuiamo con il task locale anche se la sincronizzazione fallisce
+      return newTask;
     }
-
-    return newTask;
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
@@ -148,6 +156,14 @@ export function useDatabaseSync() {
       if (!response.ok) {
         throw new Error('Failed to sync task update to database');
       }
+      
+      // Dopo l'aggiornamento, ricarica i dati dal database per sincronizzare tutti i dispositivi
+      // Usa un piccolo delay per assicurarsi che l'aggiornamento sia stato completato
+      setTimeout(() => {
+        if (session?.user?.email && hasLoadedOnce) {
+          loadFromDatabase(false);
+        }
+      }, 500);
     } catch (err) {
       console.error('Error syncing task update to database:', err);
     }
@@ -332,24 +348,24 @@ export function useDatabaseSync() {
     }
   };
 
-  // Polling periodico per sincronizzare i dati ogni 30 secondi (solo dopo il primo caricamento)
+  // Polling periodico per sincronizzare i dati ogni 15 secondi (solo dopo il primo caricamento)
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
       const interval = setInterval(() => {
         loadFromDatabase(false); // Non è il primo caricamento, quindi non mostriamo il loading
-      }, 30000); // 30 secondi
+      }, 15000); // 15 secondi invece di 30 per sincronizzazione più frequente
 
       return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.email, hasLoadedOnce]);
   
-  // Sincronizzazione immediata dopo modifiche (con debounce)
+  // Sincronizzazione immediata dopo modifiche (con debounce più corto)
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
       const timeout = setTimeout(() => {
         loadFromDatabase(false);
-      }, 2000); // Aspetta 2 secondi dopo l'ultima modifica
+      }, 1000); // Aspetta 1 secondo dopo l'ultima modifica (ridotto da 2 secondi)
       
       return () => clearTimeout(timeout);
     }
