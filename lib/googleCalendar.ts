@@ -31,7 +31,14 @@ interface GoogleCalendarEvent {
 async function getAccessToken(): Promise<string | null> {
   try {
     const session = await getServerSession(authOptions);
-    return (session as any)?.accessToken || null;
+    const accessToken = (session as any)?.accessToken;
+    
+    if (!accessToken) {
+      console.error('No access token available in session');
+      return null;
+    }
+    
+    return accessToken;
   } catch (error) {
     console.error('Error getting access token:', error);
     return null;

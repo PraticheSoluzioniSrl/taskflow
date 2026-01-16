@@ -186,20 +186,32 @@ export default function Sidebar({ onClose }: SidebarProps) {
               </span>
             )}
           </button>
-          {overdueCount > 0 && (
-            <button
-              onClick={() => {/* TODO: filter overdue */}}
-              className="sidebar-link w-full justify-between text-red-400"
-            >
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5" />
-                <span>In Ritardo</span>
-              </div>
+          <button
+            onClick={() => {
+              if (filters.showOverdueOnly) {
+                setFilters({ showOverdueOnly: false });
+                setViewMode('list');
+              } else {
+                setFilters({ showOverdueOnly: true, showImportantOnly: false });
+                setViewMode('list');
+              }
+            }}
+            className={cn(
+              'sidebar-link w-full justify-between',
+              filters.showOverdueOnly && 'sidebar-link-active text-red-400',
+              !filters.showOverdueOnly && overdueCount > 0 && 'text-red-400'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5" />
+              <span>In Ritardo</span>
+            </div>
+            {overdueCount > 0 && (
               <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs">
                 {overdueCount}
               </span>
-            </button>
-          )}
+            )}
+          </button>
         </div>
 
         {/* Projects */}

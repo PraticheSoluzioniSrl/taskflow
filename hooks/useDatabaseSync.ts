@@ -77,8 +77,7 @@ export function useDatabaseSync() {
       ]);
 
       // Aggiorna lo store con i dati dal database
-      // Nota: per ora sovrascriviamo i dati locali con quelli del database
-      // In futuro possiamo implementare una logica di merge più sofisticata
+      // Sostituiamo completamente i dati locali con quelli del database per garantire sincronizzazione
       useTaskStore.setState({
         tasks: tasksData || [],
         projects: projectsData || [],
@@ -118,8 +117,15 @@ export function useDatabaseSync() {
       }
 
       const syncedTask = await response.json();
-      // Aggiorna lo store con l'ID dal database
-      storeUpdateTask(newTask.id, { id: syncedTask.id });
+      // Aggiorna lo store con tutti i dati dal database (incluso l'ID)
+      // Rimuovi il task locale e aggiungi quello sincronizzato dal database
+      storeDeleteTask(newTask.id);
+      // Aggiungi il task sincronizzato direttamente allo store senza chiamare addTask
+      // per evitare un loop infinito
+      const { tasks } = useTaskStore.getState();
+      useTaskStore.setState({
+        tasks: [...tasks.filter(t => t.id !== newTask.id), syncedTask],
+      });
     } catch (err) {
       console.error('Error syncing task to database:', err);
       // Continuiamo con il task locale anche se la sincronizzazione fallisce
@@ -335,7 +341,7 @@ export function useDatabaseSync() {
 
       return () => clearInterval(interval);
     }
-  }, [status, session, hasLoadedOnce]);
+  }, [status, session?.user?.email, hasLoadedOnce]);
 
   return {
     isLoading,

@@ -68,6 +68,7 @@ const defaultFilters: FilterState = {
   status: undefined,
   showCompleted: true,
   showImportantOnly: false,
+  showOverdueOnly: false,
   searchQuery: '',
 };
 
@@ -320,6 +321,20 @@ export const useTaskStore = create<TaskStore>()(
           // Filtro solo importanti
           if (filters.showImportantOnly && !task.important) {
             return false;
+          }
+
+          // Filtro solo in ritardo
+          if (filters.showOverdueOnly) {
+            if (!task.dueDate || task.completed) {
+              return false;
+            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const dueDate = new Date(task.dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate >= today) {
+              return false;
+            }
           }
 
           // Filtro progetto

@@ -118,17 +118,26 @@ export default function TaskModal({
       savedTask = { ...task, ...taskData };
     } else {
       const newTask = await syncAddTask(taskData);
-      savedTask = { ...newTask, ...taskData };
+      // Il task restituito da syncAddTask potrebbe avere un ID diverso se sincronizzato con il DB
+      savedTask = newTask;
     }
 
     // Sincronizza con Google Calendar se c'è una data
     if (dueDate) {
       try {
-        await fetch('/api/calendar/sync', {
+        const syncResponse = await fetch('/api/calendar/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ task: savedTask, action: 'sync' }),
         });
+        
+        if (syncResponse.ok) {
+          const syncData = await syncResponse.json();
+          // Aggiorna il task con l'eventId se è stato creato/aggiornato
+          if (syncData.eventId && syncData.eventId !== savedTask.googleCalendarEventId) {
+            await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+          }
+        }
       } catch (error) {
         console.error('Error syncing to calendar:', error);
       }
@@ -145,8 +154,9 @@ export default function TaskModal({
       }
     }
 
-    onClose();
+    // Chiudi il modal e resetta il form dopo il salvataggio
     resetForm();
+    onClose();
   };
 
   const handleAddSubtask = () => {
@@ -410,18 +420,39 @@ export default function TaskModal({
               {subtasks.map((subtask) => (
                 <div
                   key={subtask.id}
-                  className="flex items-center gap-2 p-2 bg-slate-900/60 rounded-lg"
+                  className="flex flex-col gap-2 p-2 bg-slate-900/60 rounded-lg"
                 >
-                  <span className="flex-1 text-sm text-slate-300">
-                    {subtask.title}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteSubtask(subtask.id)}
-                    className="p-1 text-slate-500 hover:text-red-400"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 text-sm text-slate-300">
+                      {subtask.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSubtask(subtask.id)}
+                      className="p-1 text-slate-500 hover:text-red-400"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-1">
+                      <Bell className="inline w-3 h-3 mr-1" />
+                      Promemoria subtask
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={subtask.reminder || ''}
+                      onChange={(e) => {
+                        const updatedSubtasks = subtasks.map((st) =>
+                          st.id === subtask.id
+                            ? { ...st, reminder: e.target.value || undefined }
+                            : st
+                        );
+                        setSubtasks(updatedSubtasks);
+                      }}
+                      className="input-base text-xs"
+                    />
+                  </div>
                 </div>
               ))}
               <div className="flex gap-2">

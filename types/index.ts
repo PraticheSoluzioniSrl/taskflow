@@ -51,6 +51,7 @@ export interface FilterState {
   status?: TaskStatus;
   showCompleted: boolean;
   showImportantOnly: boolean;
+  showOverdueOnly: boolean;
   searchQuery: string;
 }
 

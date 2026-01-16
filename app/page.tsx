@@ -132,6 +132,8 @@ export default function Home() {
             <h1 className="text-2xl font-bold text-white">
               {filters.showImportantOnly
                 ? 'Task Importanti'
+                : filters.showOverdueOnly
+                ? 'Task In Ritardo'
                 : currentProject
                 ? currentProject.name
                 : viewMode === 'calendar'

@@ -246,8 +246,71 @@ export function checkDueTasks(tasks: any[], reminderMinutes: number = 15) {
   const now = new Date();
   
   tasks.forEach(task => {
-    // Salta task completati o senza data
-    if (task.completed || !task.dueDate) return;
+    // Controlla promemoria del task principale
+    if (task.reminder && !task.completed) {
+      const reminderDate = new Date(task.reminder);
+      const timeUntilReminder = reminderDate.getTime() - now.getTime();
+      const minutesUntilReminder = Math.floor(timeUntilReminder / 60000);
+      
+      if (minutesUntilReminder > 0 && minutesUntilReminder <= 15) {
+        const notificationKey = `${task.id}_reminder`;
+        const notifiedTasks = JSON.parse(
+          localStorage.getItem('notified_tasks') || '[]'
+        );
+        
+        if (!notifiedTasks.includes(notificationKey)) {
+          notificationService.showNotification(
+            `🔔 Promemoria: ${task.title}`,
+            {
+              body: `Il promemoria è tra ${minutesUntilReminder} ${minutesUntilReminder === 1 ? 'minuto' : 'minuti'}`,
+              tag: `${task.id}_reminder`,
+              requireInteraction: false,
+              sound: true,
+            }
+          );
+          
+          notifiedTasks.push(notificationKey);
+          localStorage.setItem('notified_tasks', JSON.stringify(notifiedTasks));
+        }
+      }
+    }
+    
+    // Salta task completati o senza data per le notifiche di scadenza
+    if (task.completed || !task.dueDate) {
+      // Controlla comunque i sottotask
+      if (task.subtasks && task.subtasks.length > 0) {
+        task.subtasks.forEach((subtask: any) => {
+          if (subtask.reminder && !subtask.completed) {
+            const reminderDate = new Date(subtask.reminder);
+            const timeUntilReminder = reminderDate.getTime() - now.getTime();
+            const minutesUntilReminder = Math.floor(timeUntilReminder / 60000);
+            
+            if (minutesUntilReminder > 0 && minutesUntilReminder <= 15) {
+              const notificationKey = `${task.id}_subtask_${subtask.id}_reminder`;
+              const notifiedTasks = JSON.parse(
+                localStorage.getItem('notified_tasks') || '[]'
+              );
+              
+              if (!notifiedTasks.includes(notificationKey)) {
+                notificationService.showNotification(
+                  `🔔 Promemoria Subtask: ${subtask.title}`,
+                  {
+                    body: `Task: ${task.title}`,
+                    tag: notificationKey,
+                    requireInteraction: false,
+                    sound: true,
+                  }
+                );
+                
+                notifiedTasks.push(notificationKey);
+                localStorage.setItem('notified_tasks', JSON.stringify(notifiedTasks));
+              }
+            }
+          }
+        });
+      }
+      return;
+    }
     
     // Gestisci sia date che datetime
     let dueDate: Date;
@@ -321,6 +384,39 @@ export function checkDueTasks(tasks: any[], reminderMinutes: number = 15) {
         notifiedTasks.push(overdueKey);
         localStorage.setItem('notified_tasks', JSON.stringify(notifiedTasks));
       }
+    }
+    
+    // Controlla i sottotask per promemoria
+    if (task.subtasks && task.subtasks.length > 0) {
+      task.subtasks.forEach((subtask: any) => {
+        if (subtask.reminder && !subtask.completed) {
+          const reminderDate = new Date(subtask.reminder);
+          const timeUntilReminder = reminderDate.getTime() - now.getTime();
+          const minutesUntilReminder = Math.floor(timeUntilReminder / 60000);
+          
+          if (minutesUntilReminder > 0 && minutesUntilReminder <= 15) {
+            const notificationKey = `${task.id}_subtask_${subtask.id}_reminder`;
+            const notifiedTasks = JSON.parse(
+              localStorage.getItem('notified_tasks') || '[]'
+            );
+            
+            if (!notifiedTasks.includes(notificationKey)) {
+              notificationService.showNotification(
+                `🔔 Promemoria Subtask: ${subtask.title}`,
+                {
+                  body: `Task: ${task.title}`,
+                  tag: notificationKey,
+                  requireInteraction: false,
+                  sound: true,
+                }
+              );
+              
+              notifiedTasks.push(notificationKey);
+              localStorage.setItem('notified_tasks', JSON.stringify(notifiedTasks));
+            }
+          }
+        }
+      });
     }
   });
 }
