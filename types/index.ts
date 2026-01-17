@@ -16,6 +16,10 @@ export interface Task {
   updatedAt: string;
   googleCalendarEventId?: string;
   order: number;
+  version: number;
+  lastModified: number;
+  syncStatus?: 'synced' | 'pending' | 'conflict';
+  calendarEventId?: string;
 }
 
 export interface Subtask {
@@ -34,6 +38,9 @@ export interface Project {
   color: string;
   icon?: string;
   createdAt: string;
+  version: number;
+  lastModified: number;
+  syncStatus?: 'synced' | 'pending' | 'conflict';
 }
 
 export interface Tag {
@@ -41,6 +48,9 @@ export interface Tag {
   userId: string; // ID dell'utente proprietario del tag
   name: string;
   color: string;
+  version: number;
+  lastModified: number;
+  syncStatus?: 'synced' | 'pending' | 'conflict';
 }
 
 export type ViewMode = 'list' | 'calendar' | 'kanban';
@@ -96,3 +106,20 @@ export const KANBAN_COLUMNS: { id: TaskStatus; title: string; color: string }[] 
   { id: 'in-progress', title: 'In Corso', color: '#f59e0b' },
   { id: 'done', title: 'Completato', color: '#22c55e' },
 ];
+
+export interface PendingChange {
+  type: 'task' | 'project' | 'tag';
+  action: 'create' | 'update' | 'delete';
+  id: string;
+  data?: any;
+  timestamp: number;
+  retryCount: number;
+}
+
+export interface SyncConflict {
+  itemType: 'task' | 'project' | 'tag';
+  itemId: string;
+  localVersion: any;
+  remoteVersion: any;
+  timestamp: number;
+}

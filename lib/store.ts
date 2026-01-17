@@ -20,7 +20,7 @@ interface TaskStore {
   setCurrentUserId: (userId: string | null) => void;
   
   // Task Actions
-  addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => Task;
+  addTask: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'version' | 'lastModified'>) => Task;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   toggleTaskComplete: (id: string) => void;
@@ -91,6 +91,7 @@ export const useTaskStore = create<TaskStore>()(
       // Task Actions
       addTask: (taskData) => {
         const now = new Date().toISOString();
+        const nowTimestamp = Date.now();
         const tasks = get().tasks;
         const newTask: Task = {
           ...taskData,
@@ -98,6 +99,10 @@ export const useTaskStore = create<TaskStore>()(
           createdAt: now,
           updatedAt: now,
           order: tasks.length,
+          version: 1,
+          lastModified: nowTimestamp,
+          syncStatus: 'pending',
+          calendarEventId: taskData.calendarEventId,
         };
         set({ tasks: [...tasks, newTask] });
         return newTask;
@@ -234,12 +239,16 @@ export const useTaskStore = create<TaskStore>()(
 
       // Project Actions
       addProject: (name, color, userId) => {
+        const nowTimestamp = Date.now();
         const newProject: Project = {
           id: uuidv4(),
           userId,
           name,
           color,
           createdAt: new Date().toISOString(),
+          version: 1,
+          lastModified: nowTimestamp,
+          syncStatus: 'pending',
         };
         set({ projects: [...get().projects, newProject] });
         return newProject;
@@ -264,11 +273,15 @@ export const useTaskStore = create<TaskStore>()(
 
       // Tag Actions
       addTag: (name, color, userId) => {
+        const nowTimestamp = Date.now();
         const newTag: Tag = {
           id: uuidv4(),
           userId,
           name,
           color,
+          version: 1,
+          lastModified: nowTimestamp,
+          syncStatus: 'pending',
         };
         set({ tags: [...get().tags, newTag] });
         return newTag;

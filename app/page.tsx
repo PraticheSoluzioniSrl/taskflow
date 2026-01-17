@@ -38,14 +38,14 @@ export default function Home() {
     }
   }, [status]);
 
-  // Controlla i task in scadenza ogni minuto
+  // Controlla i task in scadenza ogni 2 minuti (ottimizzato per ridurre CPU)
   useEffect(() => {
     if (status !== 'authenticated') return;
 
     const interval = setInterval(() => {
       const allTasks = useTaskStore.getState().tasks;
       checkDueTasks(allTasks, 15); // 15 minuti prima della scadenza
-    }, 60000); // Ogni minuto
+    }, 120000); // Ogni 2 minuti invece di 1 per ridurre l'uso di CPU
 
     return () => clearInterval(interval);
   }, [status]);

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useTaskStore } from '@/lib/store';
-import { Task, Project, Tag } from '@/types';
+import { Task, Project, Tag, PendingChange, SyncConflict } from '@/types';
 
 export function useDatabaseSync() {
   const { data: session, status } = useSession();
@@ -27,8 +27,11 @@ export function useDatabaseSync() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+  const syncInProgress = useRef(false);
+  const lastSyncTimestamp = useRef<number>(0);
 
-  // Carica i dati dal database quando l'utente si logga (solo una volta)
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && !hasLoadedOnce) {
       loadFromDatabase(true);
@@ -36,8 +39,71 @@ export function useDatabaseSync() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.email]);
 
+  const mergeItems = <T extends Task | Project | Tag>(
+    localItems: T[],
+    remoteItems: T[],
+    itemType: 'task' | 'project' | 'tag'
+  ): { merged: T[]; conflicts: SyncConflict[] } => {
+    const mergedMap = new Map<string, T>();
+    const detectedConflicts: SyncConflict[] = [];
+
+    localItems.forEach(item => {
+      mergedMap.set(item.id, item);
+    });
+
+    remoteItems.forEach(remoteItem => {
+      const localItem = mergedMap.get(remoteItem.id);
+
+      if (!localItem) {
+        mergedMap.set(remoteItem.id, remoteItem);
+      } else {
+        const localVersion = (localItem as any).version || 1;
+        const remoteVersion = (remoteItem as any).version || 1;
+        const localLastModified = (localItem as any).lastModified || 0;
+        const remoteLastModified = (remoteItem as any).lastModified || 0;
+
+        if (localVersion > remoteVersion) {
+          // Mantieni locale
+        } else if (localVersion < remoteVersion) {
+          mergedMap.set(remoteItem.id, remoteItem);
+        } else {
+          if (localLastModified > remoteLastModified) {
+            // Mantieni locale
+          } else if (localLastModified < remoteLastModified) {
+            mergedMap.set(remoteItem.id, remoteItem);
+          } else {
+            // Conflitto - stessa versione e stesso timestamp
+            detectedConflicts.push({
+              itemType,
+              itemId: remoteItem.id,
+              localVersion: localItem,
+              remoteVersion: remoteItem,
+              timestamp: Date.now(),
+            });
+            mergedMap.set(remoteItem.id, remoteItem);
+          }
+        }
+      }
+    });
+
+    return {
+      merged: Array.from(mergedMap.values()),
+      conflicts: detectedConflicts,
+    };
+  };
+
   const loadFromDatabase = async (isInitialLoad = false) => {
-    if (!session?.user?.email) return;
+    if (!session?.user?.email || syncInProgress.current) return;
+    
+    // Evita chiamate troppo frequenti (minimo 30 secondi tra chiamate non iniziali)
+    if (!isInitialLoad) {
+      const timeSinceLastSync = Date.now() - lastSyncTimestamp.current;
+      if (timeSinceLastSync < 30000) {
+        return; // Troppo presto dall'ultima sincronizzazione
+      }
+    }
+    
+    syncInProgress.current = true;
 
     if (isInitialLoad) {
       setIsLoading(true);
@@ -49,17 +115,20 @@ export function useDatabaseSync() {
       const userId = session.user.email;
       setCurrentUserId(userId);
 
-      // Carica tasks, projects e tags dal database con timeout
+      if (pendingChanges.length > 0 && !isInitialLoad) {
+        await syncPendingChanges();
+      }
+
       const fetchWithTimeout = (url: string, timeout: number) => {
         return Promise.race([
           fetch(url),
-          new Promise<Response>((_, reject) => 
+          new Promise<Response>((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), timeout)
           ),
         ]);
       };
 
-      const timeout = isInitialLoad ? 10000 : 30000; // 10s per il primo caricamento, 30s per il polling
+      const timeout = isInitialLoad ? 15000 : 30000;
       const [tasksRes, projectsRes, tagsRes] = await Promise.all([
         fetchWithTimeout('/api/tasks', timeout),
         fetchWithTimeout('/api/projects', timeout),
@@ -76,29 +145,41 @@ export function useDatabaseSync() {
         tagsRes.json(),
       ]);
 
-      // Aggiorna lo store con i dati dal database
-      // Sostituiamo completamente i dati locali con quelli del database per garantire sincronizzazione
-      // Questo assicura che tutti i dispositivi vedano gli stessi dati
+      const tasksMerge = mergeItems(tasks, tasksData || [], 'task');
+      const projectsMerge = mergeItems(projects, projectsData || [], 'project');
+      const tagsMerge = mergeItems(tags, tagsData || [], 'tag');
+
       useTaskStore.setState({
-        tasks: tasksData || [],
-        projects: projectsData || [],
-        tags: tagsData || [],
+        tasks: tasksMerge.merged,
+        projects: projectsMerge.merged,
+        tags: tagsMerge.merged,
       });
-      setHasLoadedOnce(true);
+
+      const allConflicts = [
+        ...tasksMerge.conflicts,
+        ...projectsMerge.conflicts,
+        ...tagsMerge.conflicts,
+      ];
       
-      // Log per debug (solo in sviluppo)
+      if (allConflicts.length > 0) {
+        setConflicts(prev => [...prev, ...allConflicts]);
+      }
+
+      setHasLoadedOnce(true);
+      lastSyncTimestamp.current = Date.now();
+      
       if (process.env.NODE_ENV === 'development') {
         console.log(`[Sync] Loaded ${tasksData?.length || 0} tasks, ${projectsData?.length || 0} projects, ${tagsData?.length || 0} tags`);
       }
     } catch (err) {
       console.error('Error loading from database:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
-      // In caso di errore, continuiamo con i dati locali
-      // Se è il primo caricamento, impostiamo comunque hasLoadedOnce per permettere all'app di funzionare
+      
       if (isInitialLoad) {
         setHasLoadedOnce(true);
       }
     } finally {
+      syncInProgress.current = false;
       if (isInitialLoad) {
         setIsLoading(false);
         setIsSyncing(false);
@@ -106,278 +187,314 @@ export function useDatabaseSync() {
     }
   };
 
-  // Funzioni wrapper che sincronizzano con il database
-  const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
-    const newTask = storeAddTask(task);
+  const syncPendingChanges = async () => {
+    if (pendingChanges.length === 0 || !session?.user?.email) return;
 
-    // Sincronizza con il database
-    try {
-      const response = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(task),
-      });
+    const changesToSync = [...pendingChanges];
+    const successfulChanges: string[] = [];
 
-      if (!response.ok) {
-        throw new Error('Failed to sync task to database');
+    for (const change of changesToSync) {
+      try {
+        let endpoint = '';
+        let method = '';
+        let body: any = null;
+
+        switch (change.type) {
+          case 'task':
+            endpoint = change.action === 'delete' 
+              ? `/api/tasks/${change.id}` 
+              : change.action === 'create'
+              ? '/api/tasks'
+              : `/api/tasks/${change.id}`;
+            method = change.action === 'delete' ? 'DELETE' : change.action === 'create' ? 'POST' : 'PUT';
+            body = change.action !== 'delete' ? change.data : null;
+            break;
+          case 'project':
+            endpoint = change.action === 'delete'
+              ? `/api/projects/${change.id}`
+              : change.action === 'create'
+              ? '/api/projects'
+              : `/api/projects/${change.id}`;
+            method = change.action === 'delete' ? 'DELETE' : change.action === 'create' ? 'POST' : 'PUT';
+            body = change.action !== 'delete' ? change.data : null;
+            break;
+          case 'tag':
+            endpoint = change.action === 'delete'
+              ? `/api/tags/${change.id}`
+              : change.action === 'create'
+              ? '/api/tags'
+              : `/api/tags/${change.id}`;
+            method = change.action === 'delete' ? 'DELETE' : change.action === 'create' ? 'POST' : 'PUT';
+            body = change.action !== 'delete' ? change.data : null;
+            break;
+        }
+
+        const response = await fetch(endpoint, {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+
+        if (response.ok) {
+          successfulChanges.push(`${change.id}_${change.timestamp}`);
+        } else {
+          throw new Error(`HTTP ${response.status}`);
+        }
+      } catch (err) {
+        const updatedChange = { ...change, retryCount: change.retryCount + 1 };
+        
+        if (updatedChange.retryCount < 3) {
+          setPendingChanges(prev => 
+            prev.map(c => 
+              c.id === change.id && c.timestamp === change.timestamp 
+                ? updatedChange 
+                : c
+            )
+          );
+        } else {
+          // Rimuovi dopo 3 tentativi falliti
+          successfulChanges.push(`${change.id}_${change.timestamp}`);
+        }
       }
+    }
 
-      const syncedTask = await response.json();
-      // Aggiorna lo store con tutti i dati dal database (incluso l'ID)
-      // Rimuovi il task locale e aggiungi quello sincronizzato dal database
-      storeDeleteTask(newTask.id);
-      // Aggiungi il task sincronizzato direttamente allo store senza chiamare addTask
-      // per evitare un loop infinito
-      const { tasks } = useTaskStore.getState();
-      useTaskStore.setState({
-        tasks: [...tasks.filter(t => t.id !== newTask.id), syncedTask],
-      });
-      
-      // Restituisci il task sincronizzato dal database invece di quello locale
-      return syncedTask;
-    } catch (err) {
-      console.error('Error syncing task to database:', err);
-      // Continuiamo con il task locale anche se la sincronizzazione fallisce
-      return newTask;
+    if (successfulChanges.length > 0) {
+      setPendingChanges(prev =>
+        prev.filter(c => !successfulChanges.includes(`${c.id}_${c.timestamp}`))
+      );
     }
   };
 
+  const addPendingChange = useCallback((change: Omit<PendingChange, 'timestamp' | 'retryCount'>) => {
+    setPendingChanges(prev => [
+      ...prev,
+      {
+        ...change,
+        timestamp: Date.now(),
+        retryCount: 0,
+      },
+    ]);
+  }, []);
+
+  const addTask = async (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'version' | 'lastModified'>) => {
+    const now = Date.now();
+    const newTask: Task = {
+      ...storeAddTask(task),
+      version: 1,
+      lastModified: now,
+      syncStatus: 'pending',
+    };
+
+    const { tasks } = useTaskStore.getState();
+    useTaskStore.setState({
+      tasks: [...tasks.filter(t => t.id !== newTask.id), newTask],
+    });
+
+    addPendingChange({
+      type: 'task',
+      action: 'create',
+      id: newTask.id,
+      data: task,
+    });
+
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
+    // syncPendingChanges().catch(console.error);
+
+    return newTask;
+  };
+
   const updateTask = async (id: string, updates: Partial<Task>) => {
-    storeUpdateTask(id, updates);
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
 
-    // Sincronizza con il database
-    try {
-      const response = await fetch(`/api/tasks/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
+    const now = Date.now();
+    
+    storeUpdateTask(id, {
+      ...updates,
+      version: (task.version || 1) + 1,
+      lastModified: now,
+      syncStatus: 'pending',
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync task update to database');
-      }
-      
-      // Dopo l'aggiornamento, ricarica i dati dal database per sincronizzare tutti i dispositivi
-      // Usa un piccolo delay per assicurarsi che l'aggiornamento sia stato completato
-      setTimeout(() => {
-        if (session?.user?.email && hasLoadedOnce) {
-          loadFromDatabase(false);
-        }
-      }, 500);
-    } catch (err) {
-      console.error('Error syncing task update to database:', err);
-    }
+    addPendingChange({
+      type: 'task',
+      action: 'update',
+      id,
+      data: updates,
+    });
+
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
+    // syncPendingChanges().catch(console.error);
   };
 
   const deleteTask = async (id: string) => {
     storeDeleteTask(id);
 
-    // Sincronizza con il database
-    try {
-      const response = await fetch(`/api/tasks/${id}`, {
-        method: 'DELETE',
-      });
+    addPendingChange({
+      type: 'task',
+      action: 'delete',
+      id,
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync task deletion to database');
-      }
-    } catch (err) {
-      console.error('Error syncing task deletion to database:', err);
-      // Ripristina il task se la cancellazione fallisce
-      // (in produzione potresti voler gestire questo diversamente)
-    }
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
+    // syncPendingChanges().catch(console.error);
   };
 
   const addProject = async (name: string, color: string, userId: string) => {
     const newProject = storeAddProject(name, color, userId);
 
-    // Sincronizza con il database
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color, userId }),
-      });
+    addPendingChange({
+      type: 'project',
+      action: 'create',
+      id: newProject.id,
+      data: { name, color, userId },
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync project to database');
-      }
-
-      const syncedProject = await response.json();
-      storeUpdateProject(newProject.id, { id: syncedProject.id });
-    } catch (err) {
-      console.error('Error syncing project to database:', err);
-    }
-
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
     return newProject;
   };
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
     storeUpdateProject(id, updates);
 
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
+    addPendingChange({
+      type: 'project',
+      action: 'update',
+      id,
+      data: updates,
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync project update to database');
-      }
-    } catch (err) {
-      console.error('Error syncing project update to database:', err);
-    }
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
   };
 
   const deleteProject = async (id: string) => {
     storeDeleteProject(id);
 
-    try {
-      const response = await fetch(`/api/projects/${id}`, {
-        method: 'DELETE',
-      });
+    addPendingChange({
+      type: 'project',
+      action: 'delete',
+      id,
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync project deletion to database');
-      }
-    } catch (err) {
-      console.error('Error syncing project deletion to database:', err);
-    }
+    syncPendingChanges().catch(console.error);
   };
 
   const addTag = async (name: string, color: string, userId: string) => {
     const newTag = storeAddTag(name, color, userId);
 
-    try {
-      const response = await fetch('/api/tags', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, color, userId }),
-      });
+    addPendingChange({
+      type: 'tag',
+      action: 'create',
+      id: newTag.id,
+      data: { name, color, userId },
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync tag to database');
-      }
-
-      const syncedTag = await response.json();
-      storeUpdateTag(newTag.id, { id: syncedTag.id });
-    } catch (err) {
-      console.error('Error syncing tag to database:', err);
-    }
-
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
     return newTag;
   };
 
   const updateTag = async (id: string, updates: Partial<Tag>) => {
     storeUpdateTag(id, updates);
 
-    try {
-      const response = await fetch(`/api/tags/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      });
+    addPendingChange({
+      type: 'tag',
+      action: 'update',
+      id,
+      data: updates,
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync tag update to database');
-      }
-    } catch (err) {
-      console.error('Error syncing tag update to database:', err);
-    }
+    syncPendingChanges().catch(console.error);
   };
 
   const deleteTag = async (id: string) => {
     storeDeleteTag(id);
 
-    try {
-      const response = await fetch(`/api/tags/${id}`, {
-        method: 'DELETE',
-      });
+    addPendingChange({
+      type: 'tag',
+      action: 'delete',
+      id,
+    });
 
-      if (!response.ok) {
-        throw new Error('Failed to sync tag deletion to database');
-      }
-    } catch (err) {
-      console.error('Error syncing tag deletion to database:', err);
-    }
+    // Non chiamare syncPendingChanges immediatamente - lascia che il debounce lo gestisca
   };
 
   const moveTask = async (taskId: string, newStatus: Task['status']) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    storeUpdateTask(taskId, { status: newStatus });
-    
-    // Sincronizza con il database
-    try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to sync task move to database');
-      }
-    } catch (err) {
-      console.error('Error syncing task move to database:', err);
-    }
+    await updateTask(taskId, { status: newStatus });
   };
 
   const toggleTaskImportant = async (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId);
+    const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    const newImportant = !task.important;
-    storeUpdateTask(taskId, { important: newImportant });
-
-    // Sincronizza con il database
-    try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ important: newImportant }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to sync task important toggle to database');
-      }
-    } catch (err) {
-      console.error('Error syncing task important toggle to database:', err);
-    }
+    await updateTask(taskId, { important: !task.important });
   };
 
-  // Polling periodico per sincronizzare i dati ogni 15 secondi (solo dopo il primo caricamento)
+  const resolveConflict = useCallback((
+    conflictId: string,
+    resolution: 'local' | 'remote'
+  ) => {
+    setConflicts(prev => {
+      const conflict = prev.find(c => c.itemId === conflictId);
+      if (!conflict) return prev;
+
+      const chosenVersion = resolution === 'local' 
+        ? conflict.localVersion 
+        : conflict.remoteVersion;
+
+      if (conflict.itemType === 'task') {
+        storeUpdateTask(conflictId, chosenVersion);
+      } else if (conflict.itemType === 'project') {
+        storeUpdateProject(conflictId, chosenVersion);
+      } else if (conflict.itemType === 'tag') {
+        storeUpdateTag(conflictId, chosenVersion);
+      }
+
+      return prev.filter(c => c.itemId !== conflictId);
+    });
+  }, []);
+
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
+      // Polling ridotto a 45 secondi per ridurre l'uso di risorse
+      // Solo quando non ci sono modifiche pendenti
       const interval = setInterval(() => {
-        loadFromDatabase(false); // Non è il primo caricamento, quindi non mostriamo il loading
-      }, 15000); // 15 secondi invece di 30 per sincronizzazione più frequente
+        if (pendingChanges.length === 0) {
+          // Evita chiamate se è passato meno di 30 secondi dall'ultima sincronizzazione
+          const timeSinceLastSync = Date.now() - lastSyncTimestamp.current;
+          if (timeSinceLastSync >= 30000) {
+            loadFromDatabase(false);
+          }
+        }
+      }, 45000); // 45 secondi invece di 15
 
       return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session?.user?.email, hasLoadedOnce]);
-  
-  // Sincronizzazione immediata dopo modifiche (con debounce più corto)
+  }, [status, session?.user?.email, hasLoadedOnce, pendingChanges.length]);
+
   useEffect(() => {
-    if (status === 'authenticated' && session?.user?.email && hasLoadedOnce) {
+    if (status === 'authenticated' && session?.user?.email && pendingChanges.length > 0) {
+      // Debounce aumentato a 5 secondi per raggruppare più modifiche insieme
       const timeout = setTimeout(() => {
-        loadFromDatabase(false);
-      }, 1000); // Aspetta 1 secondo dopo l'ultima modifica (ridotto da 2 secondi)
-      
+        syncPendingChanges();
+      }, 5000); // 5 secondi invece di 2 per ridurre chiamate API
+
       return () => clearTimeout(timeout);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks.length, projects.length, tags.length]);
+  }, [status, session?.user?.email, pendingChanges.length]);
 
   return {
     isLoading,
     isSyncing,
     error,
+    conflicts,
+    pendingChanges: pendingChanges.length,
     loadFromDatabase,
-    // Esporta le funzioni sincronizzate
+    resolveConflict,
     addTask,
     updateTask,
     deleteTask,

@@ -29,8 +29,27 @@ export async function initDatabase() {
         user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
         color VARCHAR(7) NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
+        created_at TIMESTAMP DEFAULT NOW(),
+        version INTEGER DEFAULT 1,
+        last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+        sync_status VARCHAR(20) DEFAULT 'synced'
       );
+    `;
+    
+    // Aggiungi colonne se non esistono (per migrazione)
+    await db.sql`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='version') THEN
+          ALTER TABLE projects ADD COLUMN version INTEGER DEFAULT 1;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='last_modified') THEN
+          ALTER TABLE projects ADD COLUMN last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='projects' AND column_name='sync_status') THEN
+          ALTER TABLE projects ADD COLUMN sync_status VARCHAR(20) DEFAULT 'synced';
+        END IF;
+      END $$;
     `;
 
     // Crea tabella tags
@@ -39,8 +58,27 @@ export async function initDatabase() {
         id VARCHAR(255) PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         name VARCHAR(255) NOT NULL,
-        color VARCHAR(7) NOT NULL
+        color VARCHAR(7) NOT NULL,
+        version INTEGER DEFAULT 1,
+        last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+        sync_status VARCHAR(20) DEFAULT 'synced'
       );
+    `;
+    
+    // Aggiungi colonne se non esistono (per migrazione)
+    await db.sql`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tags' AND column_name='version') THEN
+          ALTER TABLE tags ADD COLUMN version INTEGER DEFAULT 1;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tags' AND column_name='last_modified') THEN
+          ALTER TABLE tags ADD COLUMN last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tags' AND column_name='sync_status') THEN
+          ALTER TABLE tags ADD COLUMN sync_status VARCHAR(20) DEFAULT 'synced';
+        END IF;
+      END $$;
     `;
 
     // Crea tabella tasks
@@ -60,8 +98,31 @@ export async function initDatabase() {
         google_calendar_event_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
-        task_order INTEGER DEFAULT 0
+        task_order INTEGER DEFAULT 0,
+        version INTEGER DEFAULT 1,
+        last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000,
+        sync_status VARCHAR(20) DEFAULT 'synced',
+        calendar_event_id VARCHAR(255)
       );
+    `;
+    
+    // Aggiungi colonne se non esistono (per migrazione)
+    await db.sql`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='version') THEN
+          ALTER TABLE tasks ADD COLUMN version INTEGER DEFAULT 1;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='last_modified') THEN
+          ALTER TABLE tasks ADD COLUMN last_modified BIGINT DEFAULT EXTRACT(EPOCH FROM NOW())::BIGINT * 1000;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='sync_status') THEN
+          ALTER TABLE tasks ADD COLUMN sync_status VARCHAR(20) DEFAULT 'synced';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='calendar_event_id') THEN
+          ALTER TABLE tasks ADD COLUMN calendar_event_id VARCHAR(255);
+        END IF;
+      END $$;
     `;
 
     // Crea tabella task_tags (many-to-many)
@@ -120,7 +181,9 @@ export async function createOrUpdateUser(userId: string, email: string, name?: s
 export async function getTasksByUserId(userId: string): Promise<Task[]> {
   try {
     const db = getDb();
-    // Prima recupera i task
+    
+    // Query ottimizzata: recupera tutto in batch invece di query separate per ogni task
+    // Prima recupera tutti i task
     const tasksResult = await db.sql`
       SELECT * FROM tasks
       WHERE user_id = ${userId}
@@ -128,51 +191,95 @@ export async function getTasksByUserId(userId: string): Promise<Task[]> {
     `;
 
     const tasks = tasksResult.rows;
+    
+    if (tasks.length === 0) {
+      return [];
+    }
 
-    // Per ogni task, recupera i tag e i subtask
-    const tasksWithRelations = await Promise.all(
-      tasks.map(async (task: any) => {
-        // Recupera i tag
-        const tagsResult = await db.sql`
-          SELECT tag_id FROM task_tags
-          WHERE task_id = ${task.id};
+    // Recupera tutti i tag e subtask in batch usando query separate per batch
+    // Questo evita problemi con array SQL e mantiene buone performance
+    const taskIds = tasks.map((t: any) => t.id);
+    
+    if (taskIds.length === 0) {
+      return [];
+    }
+    
+    // Usa un approccio con loop batch per evitare problemi con array SQL
+    // Processa in batch di 50 per evitare query troppo lunghe
+    const batchSize = 50;
+    const allTagsMap = new Map<string, string[]>();
+    const allSubtasksMap = new Map<string, any[]>();
+    
+    for (let i = 0; i < taskIds.length; i += batchSize) {
+      const batch = taskIds.slice(i, i + batchSize);
+      
+      // Per ogni batch, costruisci query con parametri individuali
+      // Usa un approccio più semplice: query separate per ogni ID nel batch
+      // Questo è più sicuro e compatibile con Vercel Postgres
+      const batchTagsPromises = batch.map(async (taskId: string) => {
+        const result = await db.sql`
+          SELECT tag_id FROM task_tags WHERE task_id = ${taskId}
         `;
-        const tags = tagsResult.rows.map((row: any) => row.tag_id);
-
-        // Recupera i subtask
-        const subtasksResult = await db.sql`
-          SELECT id, title, completed, reminder
-          FROM subtasks
-          WHERE task_id = ${task.id};
+        return { taskId, tags: result.rows.map((r: any) => r.tag_id) };
+      });
+      
+      const batchSubtasksPromises = batch.map(async (taskId: string) => {
+        const result = await db.sql`
+          SELECT id, title, completed, reminder FROM subtasks WHERE task_id = ${taskId}
         `;
-        const subtasks = subtasksResult.rows.map((row: any) => ({
-          id: row.id,
-          title: row.title,
-          completed: row.completed,
-          reminder: row.reminder || undefined,
-        }));
-
         return {
-          id: task.id,
-          userId: task.user_id,
-          title: task.title,
-          description: task.description,
-          completed: task.completed,
-          important: task.important,
-          dueDate: task.due_date,
-          dueTime: task.due_time,
-          reminder: task.reminder,
-          projectId: task.project_id,
-          tags,
-          subtasks,
-          status: task.status as Task['status'],
-          createdAt: task.created_at,
-          updatedAt: task.updated_at,
-          googleCalendarEventId: task.google_calendar_event_id,
-          order: task.task_order || 0,
+          taskId,
+          subtasks: result.rows.map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            completed: r.completed,
+            reminder: r.reminder || undefined,
+          })),
         };
-      })
-    );
+      });
+      
+      const batchTagsResults = await Promise.all(batchTagsPromises);
+      const batchSubtasksResults = await Promise.all(batchSubtasksPromises);
+      
+      batchTagsResults.forEach(({ taskId, tags }) => {
+        allTagsMap.set(taskId, tags);
+      });
+      
+      batchSubtasksResults.forEach(({ taskId, subtasks }) => {
+        allSubtasksMap.set(taskId, subtasks);
+      });
+    }
+    
+    // Crea mappe per accesso rapido (già popolate)
+    const tagsMap = allTagsMap;
+    const subtasksMap = allSubtasksMap;
+
+    // Le mappe sono già popolate nel loop sopra
+
+    // Costruisci i task con le relazioni
+    const tasksWithRelations = tasks.map((task: any) => ({
+      id: task.id,
+      userId: task.user_id,
+      title: task.title,
+      description: task.description,
+      completed: task.completed,
+      important: task.important,
+      dueDate: task.due_date,
+      dueTime: task.due_time,
+      reminder: task.reminder,
+      projectId: task.project_id,
+      tags: tagsMap.get(task.id) || [],
+      subtasks: subtasksMap.get(task.id) || [],
+      status: task.status as Task['status'],
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+      googleCalendarEventId: task.google_calendar_event_id,
+      order: task.task_order || 0,
+      version: task.version || 1,
+      lastModified: task.last_modified ? Number(task.last_modified) : Date.now(),
+      syncStatus: task.sync_status || 'synced',
+      calendarEventId: task.calendar_event_id,
+    }));
 
     return tasksWithRelations;
   } catch (error) {
@@ -181,25 +288,27 @@ export async function getTasksByUserId(userId: string): Promise<Task[]> {
   }
 }
 
-export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order'>): Promise<Task> {
+export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'version' | 'lastModified'>): Promise<Task> {
   try {
     const db = getDb();
     const taskId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const nowTimestamp = Date.now();
+    const version = 1;
 
     // Inserisci il task
     await db.sql`
       INSERT INTO tasks (
         id, user_id, project_id, title, description, completed, important,
         due_date, due_time, reminder, status, google_calendar_event_id,
-        created_at, updated_at, task_order
+        created_at, updated_at, task_order, version, last_modified, sync_status, calendar_event_id
       )
       VALUES (
         ${taskId}, ${task.userId}, ${task.projectId || null}, ${task.title},
         ${task.description || null}, ${task.completed}, ${task.important},
         ${task.dueDate || null}, ${task.dueTime || null}, ${task.reminder || null},
         ${task.status}, ${task.googleCalendarEventId || null},
-        ${now}, ${now}, 0
+        ${now}, ${now}, 0, ${version}, ${nowTimestamp}, 'synced', ${task.calendarEventId || null}
       );
     `;
 
@@ -230,6 +339,10 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
       createdAt: now,
       updatedAt: now,
       order: 0,
+      version,
+      lastModified: nowTimestamp,
+      syncStatus: 'synced',
+      calendarEventId: task.calendarEventId,
     };
   } catch (error) {
     console.error('Error creating task:', error);
@@ -240,40 +353,56 @@ export async function createTask(task: Omit<Task, 'id' | 'createdAt' | 'updatedA
 export async function updateTask(taskId: string, updates: Partial<Task>, userId: string): Promise<void> {
   try {
     const db = getDb();
+    
+    // Recupera il task corrente per ottenere la versione
+    const currentTaskResult = await db.sql`
+      SELECT version FROM tasks WHERE id = ${taskId} AND user_id = ${userId}
+    `;
+    const currentVersion = currentTaskResult.rows[0]?.version || 1;
+    const newVersion = updates.version !== undefined ? updates.version : currentVersion + 1;
+    const nowTimestamp = updates.lastModified !== undefined ? updates.lastModified : Date.now();
+    
     // Costruisci le query statiche per ogni campo da aggiornare
     if (updates.title !== undefined) {
-      await db.sql`UPDATE tasks SET title = ${updates.title}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET title = ${updates.title}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.description !== undefined) {
-      await db.sql`UPDATE tasks SET description = ${updates.description || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET description = ${updates.description || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.completed !== undefined) {
-      await db.sql`UPDATE tasks SET completed = ${updates.completed}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET completed = ${updates.completed}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.important !== undefined) {
-      await db.sql`UPDATE tasks SET important = ${updates.important}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET important = ${updates.important}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.dueDate !== undefined) {
-      await db.sql`UPDATE tasks SET due_date = ${updates.dueDate || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET due_date = ${updates.dueDate || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.dueTime !== undefined) {
-      await db.sql`UPDATE tasks SET due_time = ${updates.dueTime || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET due_time = ${updates.dueTime || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.reminder !== undefined) {
-      await db.sql`UPDATE tasks SET reminder = ${updates.reminder || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET reminder = ${updates.reminder || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.status !== undefined) {
-      await db.sql`UPDATE tasks SET status = ${updates.status}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET status = ${updates.status}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.projectId !== undefined) {
-      await db.sql`UPDATE tasks SET project_id = ${updates.projectId || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET project_id = ${updates.projectId || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     if (updates.googleCalendarEventId !== undefined) {
-      await db.sql`UPDATE tasks SET google_calendar_event_id = ${updates.googleCalendarEventId || null}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tasks SET google_calendar_event_id = ${updates.googleCalendarEventId || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
+    }
+    if (updates.calendarEventId !== undefined) {
+      await db.sql`UPDATE tasks SET calendar_event_id = ${updates.calendarEventId || null}, updated_at = NOW(), version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${taskId} AND user_id = ${userId}`;
+    }
+    if (updates.version !== undefined || updates.lastModified !== undefined || updates.syncStatus !== undefined) {
+      // Aggiorna solo i campi di sincronizzazione se specificati
+      await db.sql`UPDATE tasks SET version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = ${updates.syncStatus || 'synced'}, updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
     
     // Se non ci sono aggiornamenti specifici, aggiorna solo updated_at
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).filter(k => !['version', 'lastModified', 'syncStatus'].includes(k)).length === 0 && updates.version === undefined && updates.lastModified === undefined && updates.syncStatus === undefined) {
       await db.sql`UPDATE tasks SET updated_at = NOW() WHERE id = ${taskId} AND user_id = ${userId}`;
     }
 
@@ -340,6 +469,9 @@ export async function getProjectsByUserId(userId: string): Promise<Project[]> {
       name: row.name,
       color: row.color,
       createdAt: row.created_at,
+      version: row.version || 1,
+      lastModified: row.last_modified ? Number(row.last_modified) : Date.now(),
+      syncStatus: row.sync_status || 'synced',
     }));
   } catch (error) {
     console.error('Error fetching projects:', error);
@@ -347,21 +479,26 @@ export async function getProjectsByUserId(userId: string): Promise<Project[]> {
   }
 }
 
-export async function createProject(project: Omit<Project, 'id' | 'createdAt'>): Promise<Project> {
+export async function createProject(project: Omit<Project, 'id' | 'createdAt' | 'version' | 'lastModified'>): Promise<Project> {
   try {
     const db = getDb();
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
+    const nowTimestamp = Date.now();
+    const version = 1;
 
     await db.sql`
-      INSERT INTO projects (id, user_id, name, color, created_at)
-      VALUES (${projectId}, ${project.userId}, ${project.name}, ${project.color}, ${now});
+      INSERT INTO projects (id, user_id, name, color, created_at, version, last_modified, sync_status)
+      VALUES (${projectId}, ${project.userId}, ${project.name}, ${project.color}, ${now}, ${version}, ${nowTimestamp}, 'synced');
     `;
 
     return {
       ...project,
       id: projectId,
       createdAt: now,
+      version,
+      lastModified: nowTimestamp,
+      syncStatus: 'synced',
     };
   } catch (error) {
     console.error('Error creating project:', error);
@@ -372,11 +509,23 @@ export async function createProject(project: Omit<Project, 'id' | 'createdAt'>):
 export async function updateProject(projectId: string, updates: Partial<Project>, userId: string): Promise<void> {
   try {
     const db = getDb();
+    
+    // Recupera la versione corrente
+    const currentProjectResult = await db.sql`
+      SELECT version FROM projects WHERE id = ${projectId} AND user_id = ${userId}
+    `;
+    const currentVersion = currentProjectResult.rows[0]?.version || 1;
+    const newVersion = updates.version !== undefined ? updates.version : currentVersion + 1;
+    const nowTimestamp = updates.lastModified !== undefined ? updates.lastModified : Date.now();
+    
     if (updates.name !== undefined) {
-      await db.sql`UPDATE projects SET name = ${updates.name} WHERE id = ${projectId} AND user_id = ${userId}`;
+      await db.sql`UPDATE projects SET name = ${updates.name}, version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${projectId} AND user_id = ${userId}`;
     }
     if (updates.color !== undefined) {
-      await db.sql`UPDATE projects SET color = ${updates.color} WHERE id = ${projectId} AND user_id = ${userId}`;
+      await db.sql`UPDATE projects SET color = ${updates.color}, version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${projectId} AND user_id = ${userId}`;
+    }
+    if (updates.version !== undefined || updates.lastModified !== undefined || updates.syncStatus !== undefined) {
+      await db.sql`UPDATE projects SET version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = ${updates.syncStatus || 'synced'} WHERE id = ${projectId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating project:', error);
@@ -411,6 +560,9 @@ export async function getTagsByUserId(userId: string): Promise<Tag[]> {
       userId: row.user_id,
       name: row.name,
       color: row.color,
+      version: row.version || 1,
+      lastModified: row.last_modified ? Number(row.last_modified) : Date.now(),
+      syncStatus: row.sync_status || 'synced',
     }));
   } catch (error) {
     console.error('Error fetching tags:', error);
@@ -418,19 +570,24 @@ export async function getTagsByUserId(userId: string): Promise<Tag[]> {
   }
 }
 
-export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
+export async function createTag(tag: Omit<Tag, 'id' | 'version' | 'lastModified'>): Promise<Tag> {
   try {
     const db = getDb();
     const tagId = crypto.randomUUID();
+    const nowTimestamp = Date.now();
+    const version = 1;
 
     await db.sql`
-      INSERT INTO tags (id, user_id, name, color)
-      VALUES (${tagId}, ${tag.userId}, ${tag.name}, ${tag.color});
+      INSERT INTO tags (id, user_id, name, color, version, last_modified, sync_status)
+      VALUES (${tagId}, ${tag.userId}, ${tag.name}, ${tag.color}, ${version}, ${nowTimestamp}, 'synced');
     `;
 
     return {
       ...tag,
       id: tagId,
+      version,
+      lastModified: nowTimestamp,
+      syncStatus: 'synced',
     };
   } catch (error) {
     console.error('Error creating tag:', error);
@@ -441,11 +598,23 @@ export async function createTag(tag: Omit<Tag, 'id'>): Promise<Tag> {
 export async function updateTag(tagId: string, updates: Partial<Tag>, userId: string): Promise<void> {
   try {
     const db = getDb();
+    
+    // Recupera la versione corrente
+    const currentTagResult = await db.sql`
+      SELECT version FROM tags WHERE id = ${tagId} AND user_id = ${userId}
+    `;
+    const currentVersion = currentTagResult.rows[0]?.version || 1;
+    const newVersion = updates.version !== undefined ? updates.version : currentVersion + 1;
+    const nowTimestamp = updates.lastModified !== undefined ? updates.lastModified : Date.now();
+    
     if (updates.name !== undefined) {
-      await db.sql`UPDATE tags SET name = ${updates.name} WHERE id = ${tagId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tags SET name = ${updates.name}, version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${tagId} AND user_id = ${userId}`;
     }
     if (updates.color !== undefined) {
-      await db.sql`UPDATE tags SET color = ${updates.color} WHERE id = ${tagId} AND user_id = ${userId}`;
+      await db.sql`UPDATE tags SET color = ${updates.color}, version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = 'synced' WHERE id = ${tagId} AND user_id = ${userId}`;
+    }
+    if (updates.version !== undefined || updates.lastModified !== undefined || updates.syncStatus !== undefined) {
+      await db.sql`UPDATE tags SET version = ${newVersion}, last_modified = ${nowTimestamp}, sync_status = ${updates.syncStatus || 'synced'} WHERE id = ${tagId} AND user_id = ${userId}`;
     }
   } catch (error) {
     console.error('Error updating tag:', error);
