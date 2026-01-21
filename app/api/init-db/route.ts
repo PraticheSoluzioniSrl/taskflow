@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
+import { auth } from '@/lib/auth';
 import { sql } from '@vercel/postgres';
 
 export const maxDuration = 60; // Aumenta il timeout a 60 secondi
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
     try {
-          const session = await getAuthSession();
+          const session = await auth();
           if (!session?.user?.email) {
                   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
           }

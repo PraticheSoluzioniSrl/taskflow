@@ -2,7 +2,7 @@
 // API per gestire i projects nel database
 
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
+import { auth } from '@/lib/auth';
 import { sql } from '@vercel/postgres';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // GET - Recupera tutti i projects dell'utente
 export async function GET() {
   try {
-    const session = await getAuthSession();
+    const session = await auth();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -36,7 +36,7 @@ export async function GET() {
 // POST - Crea un nuovo project
 export async function POST(request: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await auth();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 // PUT - Aggiorna un project esistente
 export async function PUT(request: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await auth();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -112,7 +112,7 @@ export async function PUT(request: Request) {
 // DELETE - Elimina un project
 export async function DELETE(request: Request) {
   try {
-    const session = await getAuthSession();
+    const session = await auth();
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
