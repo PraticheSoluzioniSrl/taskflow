@@ -32,7 +32,7 @@ export default function TaskModal({
   onClose,
   defaultDate,
 }: TaskModalProps) {
-  const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask, addTask, updateTask } = useTaskStore();
+  const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask, addTask, updateTask, tasks, loadUserData } = useTaskStore();
   const { data: session } = useSession();
   
   const projects = getUserProjects();
@@ -149,31 +149,40 @@ export default function TaskModal({
       }
     } else {
       await addTask(taskData);
-      // Il task restituito da syncAddTask ora ha sempre l'ID dal database
-      savedTask = newTask;
+      // Recupera il task appena creato dallo store
+      await loadUserData();
+      // Trova il task creato usando i dati del task
+      const createdTask = tasks.find(t => 
+        t.title === taskData.title && 
+        t.userId === taskData.userId &&
+        (!taskData.dueDate || t.dueDate === taskData.dueDate)
+      );
       
-      // Sincronizza con Google Calendar se c'è una data (solo dopo che il task è stato salvato nel DB)
-      // Ottimizzato: evita chiamate ridondanti, usa direttamente savedTask invece di ricaricare tutto
-      if (dueDate && savedTask.id) {
-        try {
-          // Delay ridotto e sincronizzazione asincrona per non bloccare l'UI
-          setTimeout(async () => {
-            const syncResponse = await fetch('/api/calendar/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ task: savedTask, action: 'sync' }),
-            });
-            
-            if (syncResponse.ok) {
-              const syncData = await syncResponse.json();
-              // Aggiorna il task con l'eventId se è stato creato
-              if (syncData.eventId) {
-                await updateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+      if (createdTask) {
+        savedTask = createdTask;
+        
+        // Sincronizza con Google Calendar se c'è una data (solo dopo che il task è stato salvato nel DB)
+        if (dueDate && savedTask.id) {
+          try {
+            // Delay ridotto e sincronizzazione asincrona per non bloccare l'UI
+            setTimeout(async () => {
+              const syncResponse = await fetch('/api/calendar/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task: savedTask, action: 'sync' }),
+              });
+              
+              if (syncResponse.ok) {
+                const syncData = await syncResponse.json();
+                // Aggiorna il task con l'eventId se è stato creato
+                if (syncData.eventId) {
+                  await updateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+                }
               }
-            }
-          }, 500); // Delay ridotto da 1000ms a 500ms
-        } catch (error) {
-          console.error('Error syncing to calendar:', error);
+            }, 500);
+          } catch (error) {
+            console.error('Error syncing to calendar:', error);
+          }
         }
       }
     }
