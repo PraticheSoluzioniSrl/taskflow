@@ -219,3 +219,4 @@ MIT License - vedi [LICENSE](LICENSE) per dettagli.
 ---
 
 Creato con ❤️ usando Claude AI
+ 
