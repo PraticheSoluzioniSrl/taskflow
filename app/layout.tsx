@@ -27,9 +27,9 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           <SyncProvider>
-          {children}
-        </AuthProvider>
+            {children}
           </SyncProvider>
+        </AuthProvider>
       </body>
     </html>
   );

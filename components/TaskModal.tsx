@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Task, PROJECT_COLORS, TAG_COLORS } from '@/types';
 import { useTaskStore } from '@/lib/store';
-import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { cn, formatDate } from '@/lib/utils';
 import {
   X,
@@ -33,8 +32,7 @@ export default function TaskModal({
   onClose,
   defaultDate,
 }: TaskModalProps) {
-  const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask } = useTaskStore();
-  const { addTask: syncAddTask, updateTask: syncUpdateTask, loadFromDatabase } = useDatabaseSync();
+  const { getUserProjects, getUserTags, addSubtask, deleteSubtask, updateSubtask, addTask, updateTask } = useTaskStore();
   const { data: session } = useSession();
   
   const projects = getUserProjects();
@@ -115,7 +113,7 @@ export default function TaskModal({
 
     let savedTask: Task;
     if (task) {
-      await syncUpdateTask(task.id, taskData);
+      await updateTask(task.id, taskData);
       savedTask = { ...task, ...taskData };
       
       // Sincronizza con Google Calendar se c'è una data
@@ -131,7 +129,7 @@ export default function TaskModal({
             const syncData = await syncResponse.json();
             // Aggiorna il task con l'eventId se è stato creato/aggiornato
             if (syncData.eventId && syncData.eventId !== savedTask.googleCalendarEventId) {
-              await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+              await updateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
             }
           }
         } catch (error) {
@@ -150,7 +148,7 @@ export default function TaskModal({
         }
       }
     } else {
-      const newTask = await syncAddTask(taskData);
+      await addTask(taskData);
       // Il task restituito da syncAddTask ora ha sempre l'ID dal database
       savedTask = newTask;
       
@@ -170,7 +168,7 @@ export default function TaskModal({
               const syncData = await syncResponse.json();
               // Aggiorna il task con l'eventId se è stato creato
               if (syncData.eventId) {
-                await syncUpdateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
+                await updateTask(savedTask.id, { googleCalendarEventId: syncData.eventId });
               }
             }
           }, 500); // Delay ridotto da 1000ms a 500ms

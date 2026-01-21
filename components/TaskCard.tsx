@@ -2,7 +2,6 @@
 
 import { Task, Subtask } from '@/types';
 import { useTaskStore } from '@/lib/store';
-import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { formatRelativeDate, isOverdue, cn } from '@/lib/utils';
 import {
   Check,
@@ -40,13 +39,11 @@ export default function TaskCard({
     toggleSubtaskComplete,
     getUserProjects,
     getUserTags,
+    updateTask,
+    deleteTask,
+    toggleTaskImportant,
+    loadUserData,
   } = useTaskStore();
-  const { 
-    updateTask: syncUpdateTask, 
-    deleteTask: syncDeleteTask,
-    toggleTaskImportant: syncToggleTaskImportant,
-    loadFromDatabase
-  } = useDatabaseSync();
   
   const projects = getUserProjects();
   const tags = getUserTags();
@@ -79,7 +76,7 @@ export default function TaskCard({
           onClick={async (e) => {
             e.stopPropagation();
             const updatedTask = { ...task, completed: !task.completed };
-            await syncUpdateTask(task.id, { completed: !task.completed });
+            await updateTask(task.id, { completed: !task.completed });
             // Sincronizza con Google Calendar quando si completa/uncompleta
             if (task.dueDate) {
               try {
@@ -90,7 +87,7 @@ export default function TaskCard({
                 });
                 // Ricarica i dati per sincronizzare tutti i dispositivi
                 setTimeout(() => {
-                  loadFromDatabase(false);
+                  loadUserData();
                 }, 500);
               } catch (error) {
                 console.error('Error syncing to calendar:', error);
@@ -210,7 +207,7 @@ export default function TaskCard({
               <button
                 onClick={async (e) => {
                   e.stopPropagation();
-                  await syncToggleTaskImportant(task.id);
+                  await toggleTaskImportant(task.id);
                 }}
                 className={cn(
                   'btn-icon p-1.5',
@@ -267,7 +264,7 @@ export default function TaskCard({
                               console.error('Error deleting calendar event:', error);
                             }
                           }
-                          await syncDeleteTask(task.id);
+                          await deleteTask(task.id);
                           setShowMenu(false);
                         }}
                         className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg"

@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import { useTaskStore } from '@/lib/store';
-import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { Task, KANBAN_COLUMNS, TaskStatus } from '@/types';
 import TaskCard from './TaskCard';
 import { cn } from '@/lib/utils';
@@ -14,8 +13,7 @@ interface KanbanViewProps {
 }
 
 export default function KanbanView({ onEditTask, onAddTask }: KanbanViewProps) {
-  const { getFilteredTasks } = useTaskStore();
-  const { moveTask } = useDatabaseSync();
+  const { getFilteredTasks, moveTask } = useTaskStore();
   const tasks = getFilteredTasks();
 
   const columns = useMemo(() => {

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { useTaskStore } from '@/lib/store';
-import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { PROJECT_COLORS } from '@/types';
 import {
   LayoutList,
@@ -47,7 +46,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
     getUserTags,
     currentUserId,
   } = useTaskStore();
-  const { addProject: syncAddProject, addTag: syncAddTag } = useDatabaseSync();
+  const { addProject, addTag } = useTaskStore();
 
   // Set current user ID when session is available
   useEffect(() => {
@@ -97,7 +96,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const handleAddProject = async () => {
     if (newProjectName.trim() && session?.user?.email) {
-      await syncAddProject(newProjectName.trim(), newProjectColor, session.user.email);
+      await addProject(newProjectName.trim(), newProjectColor);
       setNewProjectName('');
       setShowAddProject(false);
     }
@@ -105,7 +104,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
 
   const handleAddTag = async () => {
     if (newTagName.trim() && session?.user?.email) {
-      await syncAddTag(newTagName.trim(), newTagColor, session.user.email);
+      await addTag(newTagName.trim(), newTagColor, session.user.email);
       setNewTagName('');
       setShowAddTag(false);
     }
