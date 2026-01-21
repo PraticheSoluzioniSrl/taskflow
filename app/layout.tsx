@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import AuthProvider from '@/components/AuthProvider';
+import { SyncProvider } from '@/components/SyncProvider';
 
 export const metadata: Metadata = {
   title: 'TaskFlow - Gestione Task Intelligente',
@@ -25,8 +26,10 @@ export default function RootLayout({
     <html lang="it" className="dark">
       <body className="antialiased">
         <AuthProvider>
+          <SyncProvider>
           {children}
         </AuthProvider>
+          </SyncProvider>
       </body>
     </html>
   );
