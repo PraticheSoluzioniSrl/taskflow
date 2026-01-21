@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useTaskStore } from '@/lib/store';
-import { useDatabaseSync } from '@/hooks/useDatabaseSync';
 import { Task } from '@/types';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -22,7 +21,6 @@ export default function Home() {
   const projects = getUserProjects();
   
   // Sincronizzazione con il database
-  const { isSyncing } = useDatabaseSync();
 
   // Set current user ID when session is available
   useEffect(() => {
