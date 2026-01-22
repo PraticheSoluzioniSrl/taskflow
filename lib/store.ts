@@ -76,6 +76,7 @@ const defaultFilters: FilterState = {
   projectId: undefined,
   tags: [],
   status: undefined,
+  searchQuery: '',
   showCompleted: true,
   showImportantOnly: false,
   showOverdueOnly: false,
