@@ -157,7 +157,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
       order: get().tasks.length,
       version: 1,
-      lastModified: new Date().toISOString(),
+      lastModified: Date.now(),
     };
     
     // Ottimistic update
