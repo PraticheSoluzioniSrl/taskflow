@@ -1,5 +1,6 @@
 'use client';
 
+import { useCalendarSync } from '@/hooks/useCalendarSync';
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -15,6 +16,8 @@ import { cn } from '@/lib/utils';
 import { initNotifications, checkDueTasks } from '@/lib/notifications';
 
 export default function Home() {
+  useCalendarSync();
+
   const { data: session, status } = useSession();
   const router = useRouter();
   const { viewMode, sidebarOpen, getUserProjects, filters, setCurrentUserId } = useTaskStore();
